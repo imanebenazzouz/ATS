@@ -26,16 +26,36 @@ def init_mock_data():
     ]
 
     st.session_state.offres = [
-        {"id": 1, "recruteur_id": 2, "titre": "Data Engineer", "entreprise": "TechCorp",
+        {"id": 1, "recruteur_id": 2, "titre": "Data Engineer", "entreprise": "TechCorp", "domaine": "Tech",
          "description": "Recherche data engineer pour pipeline ML.",
          "competences_requises": ["Python", "Docker", "SQL"],
          "statut": "active", "date_publication": "2026-06-05"},
-        {"id": 2, "recruteur_id": 2, "titre": "Développeur Backend", "entreprise": "TechCorp",
+        {"id": 2, "recruteur_id": 2, "titre": "Développeur Backend", "entreprise": "TechCorp", "domaine": "Tech",
          "description": "Développement d'API REST avec Flask.",
          "competences_requises": ["Python", "Flask", "PostgreSQL"],
          "statut": "active", "date_publication": "2026-06-12"},
+        {"id": 3, "recruteur_id": 2, "titre": "Chargé(e) de marketing digital", "entreprise": "TechCorp", "domaine": "Marketing",
+         "description": "Pilotage des campagnes d'acquisition et gestion des réseaux sociaux.",
+         "competences_requises": ["SEO", "Google Ads", "Réseaux sociaux"],
+         "statut": "active", "date_publication": "2026-06-14"},
+        {"id": 4, "recruteur_id": 2, "titre": "Contrôleur de gestion", "entreprise": "TechCorp", "domaine": "Finance",
+         "description": "Suivi budgétaire et reporting financier mensuel.",
+         "competences_requises": ["Excel", "SAP", "Comptabilité"],
+         "statut": "active", "date_publication": "2026-06-16"},
+        {"id": 5, "recruteur_id": 2, "titre": "UI/UX Designer", "entreprise": "TechCorp", "domaine": "Design",
+         "description": "Conception des interfaces et tests utilisateurs pour l'app mobile.",
+         "competences_requises": ["Figma", "UX Research", "Prototypage"],
+         "statut": "active", "date_publication": "2026-06-17"},
+        {"id": 6, "recruteur_id": 2, "titre": "Chargé(e) de recrutement", "entreprise": "TechCorp", "domaine": "Ressources Humaines",
+         "description": "Sourcing et suivi des candidatures pour les équipes tech.",
+         "competences_requises": ["Sourcing", "Entretiens", "ATS"],
+         "statut": "active", "date_publication": "2026-06-18"},
+        {"id": 7, "recruteur_id": 2, "titre": "Business Developer", "entreprise": "TechCorp", "domaine": "Vente",
+         "description": "Prospection et développement du portefeuille clients B2B.",
+         "competences_requises": ["Prospection", "Négociation", "CRM"],
+         "statut": "active", "date_publication": "2026-06-19"},
     ]
-    st.session_state.next_offre_id = 3
+    st.session_state.next_offre_id = 8
 
     st.session_state.candidatures = [
         {"id": 1, "candidat_id": 1, "offre_id": 1, "date": "2026-06-15",

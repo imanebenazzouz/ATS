@@ -140,6 +140,7 @@ def status_badge(statut: str) -> str:
     mapping = {
         "active": ("badge-active", "Active"),
         "en attente": ("badge-pending", "En attente"),
+        "acceptée": ("badge-active", "Acceptée"),
         "refusée": ("badge-rejected", "Refusée"),
         "pending": ("badge-pending", "En attente"),
     }

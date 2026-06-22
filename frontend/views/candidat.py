@@ -7,8 +7,8 @@ from views.chatbot import render_chatbot
 
 def page_candidat(user):
     st.title(f"Espace candidat — {user['prenom']} {user['nom']}")
-    tab_cv, tab_offres, tab_candidatures, tab_chat = st.tabs(
-        ["Mon CV", "Offres", "Mes candidatures", "Chatbot LLM"]
+    tab_cv, tab_offres, tab_suivi, tab_chat = st.tabs(
+        ["Mon CV", "Offres", "Suivi", "Chatbot LLM"]
     )
 
     with tab_cv:
@@ -17,8 +17,8 @@ def page_candidat(user):
     with tab_offres:
         _render_offres_tab(user)
 
-    with tab_candidatures:
-        _render_candidatures_tab(user)
+    with tab_suivi:
+        _render_suivi_tab(user)
 
     with tab_chat:
         render_chatbot(user)
@@ -54,12 +54,30 @@ def _render_cv_tab(user):
 
 
 def _render_offres_tab(user):
-    for offre in st.session_state.offres:
-        if offre["statut"] != "active":
-            continue
+    offres_actives = [o for o in st.session_state.offres if o["statut"] == "active"]
+    domaines = ["Tous"] + sorted({o["domaine"] for o in offres_actives})
+
+    col1, col2 = st.columns([1, 2])
+    domaine_choisi = col1.selectbox("Domaine", domaines, key="filtre_domaine")
+    recherche = col2.text_input("Rechercher (titre, compétence...)", key="filtre_recherche")
+
+    if domaine_choisi != "Tous":
+        offres_actives = [o for o in offres_actives if o["domaine"] == domaine_choisi]
+    if recherche:
+        terme = recherche.lower()
+        offres_actives = [
+            o for o in offres_actives
+            if terme in o["titre"].lower()
+            or any(terme in c.lower() for c in o["competences_requises"])
+        ]
+
+    if not offres_actives:
+        st.info("Aucune offre ne correspond à ces critères.")
+
+    for offre in offres_actives:
         st.markdown(f"""
         <div class="ats-card">
-            <h4>{offre['titre']}</h4>
+            <h4>{offre['titre']} <span class="ats-badge badge-pending">{offre['domaine']}</span></h4>
             <p style="color:#888; margin-top:0;">{offre['entreprise']} — publié le {offre['date_publication']}</p>
             <p>{offre['description']}</p>
             {skill_pills(offre['competences_requises'])}
@@ -85,16 +103,23 @@ def _render_offres_tab(user):
             st.rerun()
 
 
-def _render_candidatures_tab(user):
+def _render_suivi_tab(user):
     mes_candidatures = [c for c in st.session_state.candidatures if c["candidat_id"] == user["id"]]
     if not mes_candidatures:
         st.info("Aucune candidature pour le moment.")
-    for c in mes_candidatures:
+    for c in sorted(mes_candidatures, key=lambda c: c["date"], reverse=True):
         offre = next(o for o in st.session_state.offres if o["id"] == c["offre_id"])
+        reponse_html = ""
+        if c["statut"] != "en attente":
+            message = f" : « {c['message_recruteur']} »" if c.get("message_recruteur") else ""
+            reponse_html = (f"<p style='margin-top:10px; color:#555;'>Réponse du recruteur le "
+                            f"{c.get('date_reponse', '—')}{message}</p>")
         st.markdown(f"""
         <div class="ats-card">
             <h4>{offre['titre']} <span style="font-weight:400; color:#888;">— {offre['entreprise']}</span></h4>
+            <p style="color:#888; margin-top:0;">Candidature envoyée le {c['date']}</p>
             {status_badge(c['statut'])}
             {progress_bar(c['score_matching'])}
+            {reponse_html}
         </div>
         """, unsafe_allow_html=True)

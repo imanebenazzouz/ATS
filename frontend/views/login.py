@@ -12,7 +12,6 @@ def page_login():
 
     _, center, _ = st.columns([1, 1.4, 1])
     with center:
-        st.markdown("<div class='ats-card'>", unsafe_allow_html=True)
         tab_login, tab_register = st.tabs(["Se connecter", "Créer un compte"])
 
         with tab_login:
@@ -45,4 +44,3 @@ def page_login():
                     })
                     st.session_state.next_user_id += 1
                     st.success("Compte créé ! Connecte-toi.")
-        st.markdown("</div>", unsafe_allow_html=True)
