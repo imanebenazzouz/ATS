@@ -1,6 +1,8 @@
 """Espace admin : utilisateurs, modération des offres, statistiques."""
 import streamlit as st
-from theme import status_badge, avatar
+
+import api_client as api
+from theme import avatar, status_badge
 
 
 def page_admin(user):
@@ -18,7 +20,7 @@ def page_admin(user):
 
 
 def _render_users_tab(current_user):
-    for u in st.session_state.users:
+    for u in api.list_users():
         with st.container(border=True):
             col1, col2, col3 = st.columns([3, 2, 1])
             col1.markdown(f"{avatar(u['prenom'], u['nom'])}**{u['prenom']} {u['nom']}**  \n"
@@ -28,38 +30,32 @@ def _render_users_tab(current_user):
                                        index=["candidat", "recruteur", "admin"].index(u["role"]),
                                        key=f"role_{u['id']}", label_visibility="collapsed")
             if new_role != u["role"]:
-                u["role"] = new_role
+                api.update_user_role(u["id"], new_role)
                 st.rerun()
             if u["id"] != current_user["id"] and col3.button("Supprimer", key=f"del_user_{u['id']}"):
-                st.session_state.users.remove(u)
+                api.delete_user(u["id"])
                 st.rerun()
 
 
 def _render_offres_tab():
-    for offre in st.session_state.offres:
+    for offre in api.list_offres():
         with st.container(border=True):
             col1, col2, col3 = st.columns([4, 1, 1])
             col1.markdown(f"**{offre['titre']}** — {offre['entreprise']} {status_badge(offre['statut'])}",
                           unsafe_allow_html=True)
             if offre["statut"] != "active" and col2.button("Valider", key=f"valider_{offre['id']}"):
-                offre["statut"] = "active"
+                api.set_offre_statut(offre["id"], "active")
                 st.rerun()
             if col3.button("Supprimer", key=f"del_offre_{offre['id']}"):
-                st.session_state.offres.remove(offre)
+                api.delete_offre(offre["id"])
                 st.rerun()
 
 
 def _render_stats_tab():
-    nb_candidats = sum(1 for u in st.session_state.users if u["role"] == "candidat")
-    nb_recruteurs = sum(1 for u in st.session_state.users if u["role"] == "recruteur")
-    nb_offres = len(st.session_state.offres)
-    nb_candidatures = len(st.session_state.candidatures)
-    score_moyen = (sum(c["score_matching"] for c in st.session_state.candidatures) / nb_candidatures
-                   if nb_candidatures else 0)
-
+    s = api.get_stats()
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Candidats", nb_candidats)
-    col2.metric("Recruteurs", nb_recruteurs)
-    col3.metric("Offres publiées", nb_offres)
-    col4.metric("Candidatures", nb_candidatures)
-    col5.metric("Score moyen", f"{score_moyen*100:.0f}%")
+    col1.metric("Candidats", s["nb_candidats"])
+    col2.metric("Recruteurs", s["nb_recruteurs"])
+    col3.metric("Offres publiées", s["nb_offres"])
+    col4.metric("Candidatures", s["nb_candidatures"])
+    col5.metric("Score moyen", f"{s['score_moyen_matching']*100:.0f}%")

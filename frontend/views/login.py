@@ -1,12 +1,14 @@
 """Page de connexion / inscription."""
 import streamlit as st
 
+import api_client as api
+
 
 def page_login():
     st.markdown("""
     <div class="ats-hero">
         <h1>ATS Intelligent</h1>
-        <p>SaaS RH + Copilote LLM — maquette frontend (données mockées)</p>
+        <p>SaaS RH + Copilote LLM</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -19,8 +21,7 @@ def page_login():
             password = st.text_input("Mot de passe", type="password", key="login_password")
             st.caption("Comptes de démo : candidat@test.com / rh@test.com / admin@test.com — mdp `1234`")
             if st.button("Se connecter", use_container_width=True, type="primary"):
-                user = next((u for u in st.session_state.users
-                             if u["email"] == email and u["password"] == password), None)
+                user = api.login(email, password)
                 if user:
                     st.session_state.current_user_id = user["id"]
                     st.rerun()
@@ -35,12 +36,8 @@ def page_login():
             role = st.selectbox("Rôle", ["candidat", "recruteur"], key="reg_role")
             entreprise = st.text_input("Entreprise", key="reg_entreprise") if role == "recruteur" else None
             if st.button("Créer le compte", use_container_width=True, type="primary"):
-                if any(u["email"] == new_email for u in st.session_state.users):
-                    st.error("Cet email est déjà utilisé.")
-                else:
-                    st.session_state.users.append({
-                        "id": st.session_state.next_user_id, "email": new_email, "password": new_password,
-                        "role": role, "nom": nom, "prenom": prenom, "entreprise": entreprise,
-                    })
-                    st.session_state.next_user_id += 1
+                user, error = api.register(nom, prenom, new_email, new_password, role, entreprise)
+                if user:
                     st.success("Compte créé ! Connecte-toi.")
+                else:
+                    st.error(error)

@@ -24,11 +24,17 @@ def init_db():
         );
 
         -- CV des candidats
+        -- texte_brut = sortie de l'extraction PDF (Lot B). skills/experience/education
+        -- sont remplis pour l'instant par des valeurs placeholder ; le pipeline IA (Lot B)
+        -- les renseignera à partir du chunking sémantique.
         CREATE TABLE IF NOT EXISTS cvs (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             candidat_id     INTEGER NOT NULL,
             fichier_path    TEXT NOT NULL,
             texte_brut      TEXT,
+            skills          TEXT,          -- JSON: liste de compétences
+            experience      TEXT,
+            education       TEXT,
             date_upload     DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (candidat_id) REFERENCES users(id) ON DELETE CASCADE
         );
@@ -38,14 +44,15 @@ def init_db():
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,
             recruteur_id        INTEGER NOT NULL,
             titre               TEXT NOT NULL,
+            domaine             TEXT,
             description         TEXT,
-            competences_requises TEXT,
+            competences_requises TEXT,     -- JSON: liste de compétences
             statut              TEXT DEFAULT 'active' CHECK(statut IN ('active', 'inactive')),
             date_publication    DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (recruteur_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
-        -- Chunks sémantiques (CV ou Offre)
+        -- Chunks sémantiques (CV ou Offre) — rempli par le pipeline IA (Lot B)
         CREATE TABLE IF NOT EXISTS chunks (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             cv_id           INTEGER,
@@ -64,14 +71,16 @@ def init_db():
             candidat_id     INTEGER NOT NULL,
             offre_id        INTEGER NOT NULL,
             date            DATETIME DEFAULT CURRENT_TIMESTAMP,
-            statut          TEXT DEFAULT 'en_attente' CHECK(statut IN ('en_attente', 'acceptee', 'refusee')),
+            statut          TEXT DEFAULT 'en attente' CHECK(statut IN ('en attente', 'acceptée', 'refusée')),
             score_matching  REAL,
+            message_recruteur TEXT,
+            date_reponse    TEXT,
             FOREIGN KEY (candidat_id) REFERENCES users(id)   ON DELETE CASCADE,
             FOREIGN KEY (offre_id)    REFERENCES offres(id)  ON DELETE CASCADE,
             UNIQUE (candidat_id, offre_id)
         );
 
-        -- Résultats de matching IA
+        -- Résultats de matching IA (rempli par le Lot B / Lot C)
         CREATE TABLE IF NOT EXISTS matching_results (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             candidat_id     INTEGER NOT NULL,

@@ -1,7 +1,8 @@
 """Espace candidat : CV, offres, candidatures, chatbot."""
 import streamlit as st
-from datetime import datetime
-from theme import skill_pills, status_badge, progress_bar
+
+import api_client as api
+from theme import progress_bar, skill_pills, status_badge
 from views.chatbot import render_chatbot
 
 
@@ -25,16 +26,10 @@ def page_candidat(user):
 
 
 def _render_cv_tab(user):
-    mon_cv = next((c for c in st.session_state.cvs if c["candidat_id"] == user["id"]), None)
+    mon_cv = api.get_cv(user["id"])
     uploaded = st.file_uploader("Uploader mon CV (PDF)", type="pdf")
     if uploaded and st.button("Analyser le CV", type="primary"):
-        st.session_state.cvs = [c for c in st.session_state.cvs if c["candidat_id"] != user["id"]]
-        st.session_state.cvs.append({
-            "id": len(st.session_state.cvs) + 1, "candidat_id": user["id"], "fichier": uploaded.name,
-            "skills": ["Python", "NLP", "Docker"], "experience": "Expérience extraite (simulation)",
-            "education": "Formation extraite (simulation)",
-            "date_upload": datetime.now().strftime("%Y-%m-%d"),
-        })
+        api.upload_cv(user["id"], uploaded)
         st.success("CV analysé : extraction → chunking → embeddings → stockage (simulé)")
         st.rerun()
 
@@ -54,8 +49,10 @@ def _render_cv_tab(user):
 
 
 def _render_offres_tab(user):
-    offres_actives = [o for o in st.session_state.offres if o["statut"] == "active"]
-    domaines = ["Tous"] + sorted({o["domaine"] for o in offres_actives})
+    offres_actives = api.list_offres(statut="active")
+    mes_candidatures = api.list_candidatures(candidat_id=user["id"])
+    offres_postulees = {c["offre_id"] for c in mes_candidatures}
+    domaines = ["Tous"] + sorted({o["domaine"] for o in offres_actives if o["domaine"]})
 
     col1, col2 = st.columns([1, 2])
     domaine_choisi = col1.selectbox("Domaine", domaines, key="filtre_domaine")
@@ -83,37 +80,33 @@ def _render_offres_tab(user):
             {skill_pills(offre['competences_requises'])}
         </div>
         """, unsafe_allow_html=True)
-        deja_postule = any(c["candidat_id"] == user["id"] and c["offre_id"] == offre["id"]
-                            for c in st.session_state.candidatures)
-        if deja_postule:
+        if offre["id"] in offres_postulees:
             st.success("Déjà postulé")
         elif st.button("Postuler", key=f"postuler_{offre['id']}", type="primary"):
-            mon_cv = next((c for c in st.session_state.cvs if c["candidat_id"] == user["id"]), None)
-            score = 0.0
-            if mon_cv:
-                communes = set(mon_cv["skills"]) & set(offre["competences_requises"])
-                score = round(len(communes) / max(len(offre["competences_requises"]), 1), 2)
-            st.session_state.candidatures.append({
-                "id": st.session_state.next_candidature_id, "candidat_id": user["id"],
-                "offre_id": offre["id"], "date": datetime.now().strftime("%Y-%m-%d"),
-                "statut": "en attente", "score_matching": score,
-            })
-            st.session_state.next_candidature_id += 1
-            st.success("Candidature envoyée !")
+            _, error = api.create_candidature(user["id"], offre["id"])
+            if error:
+                st.warning(error)
+            else:
+                st.success("Candidature envoyée !")
             st.rerun()
 
 
 def _render_suivi_tab(user):
-    mes_candidatures = [c for c in st.session_state.candidatures if c["candidat_id"] == user["id"]]
+    mes_candidatures = api.list_candidatures(candidat_id=user["id"])
     if not mes_candidatures:
         st.info("Aucune candidature pour le moment.")
+        return
+
+    offres = {o["id"]: o for o in api.list_offres()}
     for c in sorted(mes_candidatures, key=lambda c: c["date"], reverse=True):
-        offre = next(o for o in st.session_state.offres if o["id"] == c["offre_id"])
+        offre = offres.get(c["offre_id"])
+        if not offre:
+            continue
         reponse_html = ""
         if c["statut"] != "en attente":
             message = f" : « {c['message_recruteur']} »" if c.get("message_recruteur") else ""
             reponse_html = (f"<p style='margin-top:10px; color:#555;'>Réponse du recruteur le "
-                            f"{c.get('date_reponse', '—')}{message}</p>")
+                            f"{c.get('date_reponse') or '—'}{message}</p>")
         st.markdown(f"""
         <div class="ats-card">
             <h4>{offre['titre']} <span style="font-weight:400; color:#888;">— {offre['entreprise']}</span></h4>

@@ -1,25 +1,36 @@
 """
-ATS Intelligent — Frontend Streamlit (maquette avec données mockées)
-Point d'entrée : initialise les données, applique le thème, route vers la bonne vue selon le rôle.
-Aucun backend Flask pour l'instant — tout est simulé en session_state (voir mock_data.py).
+ATS Intelligent — Frontend Streamlit
+Point d'entrée : applique le thème, route vers la bonne vue selon le rôle.
+Les données proviennent de l'API Flask (voir api_client.py) ; seul l'historique
+de chat reste local (mock_data.py, en attendant le Lot C).
 """
+import requests
 import streamlit as st
 
-from theme import inject_css, avatar
-from mock_data import init_mock_data, get_user
-from views.login import page_login
-from views.candidat import page_candidat
-from views.recruteur import page_recruteur
+import api_client as api
+from mock_data import init_session_state
+from theme import avatar, inject_css
 from views.admin import page_admin
+from views.candidat import page_candidat
+from views.login import page_login
+from views.recruteur import page_recruteur
 
 st.set_page_config(page_title="ATS Intelligent", layout="wide")
 inject_css()
-init_mock_data()
+init_session_state()
 
 if "current_user_id" not in st.session_state:
     page_login()
 else:
-    current_user = get_user(st.session_state.current_user_id)
+    try:
+        current_user = api.get_user(st.session_state.current_user_id)
+    except requests.RequestException:
+        st.error("Impossible de joindre l'API. Lance le backend : `python -m backend.app`")
+        st.stop()
+
+    if not current_user:
+        del st.session_state.current_user_id
+        st.rerun()
 
     with st.sidebar:
         st.markdown(f"""

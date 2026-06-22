@@ -1,0 +1,386 @@
+"""API Flask de la plateforme ATS (Lot A).
+
+Expose l'authentification et le CRUD (offres, CV, candidatures, utilisateurs, stats)
+au-dessus de SQLite. Le frontend Streamlit consomme cette API via `frontend/api_client.py`.
+
+Hors périmètre (volontairement laissé aux autres lots) :
+  - le matching sémantique réel (embeddings MiniLM + FAISS + cosinus) -> Lot B,
+    ici le score est une simple intersection de compétences (placeholder) ;
+  - le LLM copilote (explication, chatbot) -> Lot C.
+
+Lancer :  python -m backend.app   (depuis la racine du projet)
+"""
+import os
+
+from flask import Flask, jsonify, request
+from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
+
+from backend.db import dumps, get_connection, loads
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+app = Flask(__name__)
+
+
+# --------------------------------------------------------------------------- #
+# Sérialisation : ligne SQLite -> dict attendu par le frontend
+# --------------------------------------------------------------------------- #
+def user_to_dict(row):
+    return {
+        "id": row["id"],
+        "email": row["email"],
+        "role": row["role"],
+        "nom": row["nom"],
+        "prenom": row["prenom"],
+        "entreprise": row["entreprise"],
+    }
+
+
+def offre_to_dict(row):
+    return {
+        "id": row["id"],
+        "recruteur_id": row["recruteur_id"],
+        "titre": row["titre"],
+        "entreprise": row["entreprise"],          # vient du JOIN sur users
+        "domaine": row["domaine"],
+        "description": row["description"],
+        "competences_requises": loads(row["competences_requises"]),
+        "statut": row["statut"],
+        "date_publication": row["date_publication"],
+    }
+
+
+def cv_to_dict(row):
+    return {
+        "id": row["id"],
+        "candidat_id": row["candidat_id"],
+        "fichier": os.path.basename(row["fichier_path"]),
+        "skills": loads(row["skills"]),
+        "experience": row["experience"],
+        "education": row["education"],
+        "date_upload": row["date_upload"],
+    }
+
+
+def candidature_to_dict(row):
+    return {
+        "id": row["id"],
+        "candidat_id": row["candidat_id"],
+        "offre_id": row["offre_id"],
+        "date": row["date"],
+        "statut": row["statut"],
+        "score_matching": row["score_matching"],
+        "message_recruteur": row["message_recruteur"],
+        "date_reponse": row["date_reponse"],
+    }
+
+
+def today():
+    """Date du jour 'YYYY-MM-DD' (même format que l'ancien front mocké)."""
+    from datetime import date
+    return date.today().isoformat()
+
+
+# --------------------------------------------------------------------------- #
+# Authentification
+# --------------------------------------------------------------------------- #
+@app.post("/auth/register")
+def register():
+    data = request.get_json(force=True)
+    required = ("email", "password", "role", "nom", "prenom")
+    if not all(data.get(k) for k in required):
+        return jsonify({"error": "Champs obligatoires manquants."}), 400
+    if data["role"] not in ("candidat", "recruteur"):
+        return jsonify({"error": "Rôle invalide."}), 400
+
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            """INSERT INTO users (email, password_hash, role, nom, prenom, entreprise)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (data["email"], generate_password_hash(data["password"]), data["role"],
+             data["nom"], data["prenom"], data.get("entreprise")),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return jsonify(user_to_dict(row)), 201
+    except Exception as exc:  # IntegrityError -> email déjà pris
+        if "UNIQUE" in str(exc):
+            return jsonify({"error": "Cet email est déjà utilisé."}), 409
+        return jsonify({"error": str(exc)}), 400
+    finally:
+        conn.close()
+
+
+@app.post("/auth/login")
+def login():
+    data = request.get_json(force=True)
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM users WHERE email = ?", (data.get("email"),)).fetchone()
+    conn.close()
+    if row and check_password_hash(row["password_hash"], data.get("password", "")):
+        return jsonify(user_to_dict(row))
+    return jsonify({"error": "Email ou mot de passe incorrect."}), 401
+
+
+# --------------------------------------------------------------------------- #
+# Utilisateurs (admin)
+# --------------------------------------------------------------------------- #
+@app.get("/users")
+def list_users():
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM users ORDER BY id").fetchall()
+    conn.close()
+    return jsonify([user_to_dict(r) for r in rows])
+
+
+@app.get("/users/<int:user_id>")
+def get_user(user_id):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Utilisateur introuvable."}), 404
+    return jsonify(user_to_dict(row))
+
+
+@app.put("/users/<int:user_id>/role")
+def update_user_role(user_id):
+    role = request.get_json(force=True).get("role")
+    if role not in ("candidat", "recruteur", "admin"):
+        return jsonify({"error": "Rôle invalide."}), 400
+    conn = get_connection()
+    conn.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.delete("/users/<int:user_id>")
+def delete_user(user_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------- #
+# Offres
+# --------------------------------------------------------------------------- #
+OFFRE_SELECT = """
+    SELECT o.*, u.entreprise AS entreprise
+    FROM offres o JOIN users u ON u.id = o.recruteur_id
+"""
+
+
+@app.get("/offres")
+def list_offres():
+    clauses, params = [], []
+    if request.args.get("statut"):
+        clauses.append("o.statut = ?")
+        params.append(request.args["statut"])
+    if request.args.get("recruteur_id"):
+        clauses.append("o.recruteur_id = ?")
+        params.append(request.args["recruteur_id"])
+    sql = OFFRE_SELECT + (" WHERE " + " AND ".join(clauses) if clauses else "") + " ORDER BY o.id"
+    conn = get_connection()
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return jsonify([offre_to_dict(r) for r in rows])
+
+
+@app.post("/offres")
+def create_offre():
+    data = request.get_json(force=True)
+    conn = get_connection()
+    cur = conn.execute(
+        """INSERT INTO offres (recruteur_id, titre, domaine, description,
+                               competences_requises, statut, date_publication)
+           VALUES (?, ?, ?, ?, ?, 'active', ?)""",
+        (data["recruteur_id"], data["titre"], data.get("domaine"), data.get("description"),
+         dumps(data.get("competences_requises", [])), today()),
+    )
+    conn.commit()
+    row = conn.execute(OFFRE_SELECT + " WHERE o.id = ?", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return jsonify(offre_to_dict(row)), 201
+
+
+@app.put("/offres/<int:offre_id>")
+def update_offre(offre_id):
+    statut = request.get_json(force=True).get("statut")
+    if statut not in ("active", "inactive"):
+        return jsonify({"error": "Statut invalide."}), 400
+    conn = get_connection()
+    conn.execute("UPDATE offres SET statut = ? WHERE id = ?", (statut, offre_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.delete("/offres/<int:offre_id>")
+def delete_offre(offre_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM offres WHERE id = ?", (offre_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+# --------------------------------------------------------------------------- #
+# CV
+# --------------------------------------------------------------------------- #
+@app.get("/cvs")
+def get_cv():
+    candidat_id = request.args.get("candidat_id")
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM cvs WHERE candidat_id = ? ORDER BY id DESC LIMIT 1", (candidat_id,)
+    ).fetchone()
+    conn.close()
+    return jsonify(cv_to_dict(row) if row else None)
+
+
+@app.post("/cvs")
+def upload_cv():
+    """Reçoit le PDF (multipart) + candidat_id, le stocke et crée la fiche CV.
+
+    L'extraction réelle (texte, skills, sections) est faite par le Lot B ; ici on
+    enregistre le fichier et des valeurs placeholder pour que le front reste fonctionnel.
+    """
+    candidat_id = request.form.get("candidat_id")
+    file = request.files.get("file")
+    if not candidat_id or not file:
+        return jsonify({"error": "candidat_id et file requis."}), 400
+
+    filename = secure_filename(f"{candidat_id}_{file.filename}")
+    path = os.path.join(UPLOAD_DIR, filename)
+    file.save(path)
+
+    placeholder_skills = ["Python", "NLP", "Docker"]  # remplacé par le pipeline Lot B
+    conn = get_connection()
+    # un seul CV courant par candidat : on remplace l'ancien
+    conn.execute("DELETE FROM cvs WHERE candidat_id = ?", (candidat_id,))
+    cur = conn.execute(
+        """INSERT INTO cvs (candidat_id, fichier_path, texte_brut, skills, experience,
+                            education, date_upload)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (candidat_id, path, None, dumps(placeholder_skills),
+         "Expérience extraite (placeholder Lot B)", "Formation extraite (placeholder Lot B)", today()),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM cvs WHERE id = ?", (cur.lastrowid,)).fetchone()
+    conn.close()
+    return jsonify(cv_to_dict(row)), 201
+
+
+# --------------------------------------------------------------------------- #
+# Candidatures
+# --------------------------------------------------------------------------- #
+def _compute_score(conn, candidat_id, offre):
+    """Score placeholder = part des compétences de l'offre couvertes par le CV.
+
+    Remplacé par la similarité cosinus (embeddings + FAISS) au Lot B.
+    """
+    cv = conn.execute(
+        "SELECT skills FROM cvs WHERE candidat_id = ? ORDER BY id DESC LIMIT 1", (candidat_id,)
+    ).fetchone()
+    comps = loads(offre["competences_requises"])
+    if not cv or not comps:
+        return 0.0
+    communes = set(loads(cv["skills"])) & set(comps)
+    return round(len(communes) / len(comps), 2)
+
+
+@app.get("/candidatures")
+def list_candidatures():
+    clauses, params = [], []
+    if request.args.get("candidat_id"):
+        clauses.append("candidat_id = ?")
+        params.append(request.args["candidat_id"])
+    if request.args.get("offre_id"):
+        clauses.append("offre_id = ?")
+        params.append(request.args["offre_id"])
+    sql = "SELECT * FROM candidatures" + (" WHERE " + " AND ".join(clauses) if clauses else "")
+    conn = get_connection()
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    return jsonify([candidature_to_dict(r) for r in rows])
+
+
+@app.post("/candidatures")
+def create_candidature():
+    data = request.get_json(force=True)
+    candidat_id, offre_id = data["candidat_id"], data["offre_id"]
+    conn = get_connection()
+    offre = conn.execute("SELECT * FROM offres WHERE id = ?", (offre_id,)).fetchone()
+    if not offre:
+        conn.close()
+        return jsonify({"error": "Offre introuvable."}), 404
+    score = _compute_score(conn, candidat_id, offre)
+    try:
+        cur = conn.execute(
+            """INSERT INTO candidatures (candidat_id, offre_id, date, statut, score_matching)
+               VALUES (?, ?, ?, 'en attente', ?)""",
+            (candidat_id, offre_id, today(), score),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM candidatures WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return jsonify(candidature_to_dict(row)), 201
+    except Exception as exc:
+        if "UNIQUE" in str(exc):
+            return jsonify({"error": "Déjà postulé à cette offre."}), 409
+        return jsonify({"error": str(exc)}), 400
+    finally:
+        conn.close()
+
+
+@app.put("/candidatures/<int:cand_id>")
+def respond_candidature(cand_id):
+    data = request.get_json(force=True)
+    statut = data.get("statut")
+    if statut not in ("acceptée", "refusée"):
+        return jsonify({"error": "Statut invalide."}), 400
+    conn = get_connection()
+    conn.execute(
+        "UPDATE candidatures SET statut = ?, message_recruteur = ?, date_reponse = ? WHERE id = ?",
+        (statut, data.get("message_recruteur"), today(), cand_id),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM candidatures WHERE id = ?", (cand_id,)).fetchone()
+    conn.close()
+    return jsonify(candidature_to_dict(row))
+
+
+# --------------------------------------------------------------------------- #
+# Statistiques (admin)
+# --------------------------------------------------------------------------- #
+@app.get("/stats")
+def stats():
+    conn = get_connection()
+    q = lambda sql: conn.execute(sql).fetchone()[0]
+    nb_candidats = q("SELECT COUNT(*) FROM users WHERE role = 'candidat'")
+    nb_recruteurs = q("SELECT COUNT(*) FROM users WHERE role = 'recruteur'")
+    nb_offres = q("SELECT COUNT(*) FROM offres")
+    nb_candidatures = q("SELECT COUNT(*) FROM candidatures")
+    score_moyen = conn.execute("SELECT AVG(score_matching) FROM candidatures").fetchone()[0] or 0.0
+    conn.close()
+    return jsonify({
+        "nb_candidats": nb_candidats,
+        "nb_recruteurs": nb_recruteurs,
+        "nb_offres": nb_offres,
+        "nb_candidatures": nb_candidatures,
+        "score_moyen_matching": round(score_moyen, 2),
+    })
+
+
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok"})
+
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=True)
