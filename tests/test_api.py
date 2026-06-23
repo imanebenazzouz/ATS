@@ -175,6 +175,56 @@ def test_unicode_et_payload_special(client):
 
 
 # --------------------------------------------------------------------------- #
+# Cas limites
+# --------------------------------------------------------------------------- #
+def test_recruteur_sans_entreprise(client):
+    r = client.post("/auth/register", json={
+        "email": "rhsansboite@x.com", "password": "x", "role": "recruteur",
+        "nom": "Sans", "prenom": "Boite"})
+    assert r.status_code == 201 and r.get_json()["entreprise"] is None
+
+
+def test_candidature_sans_cv(client):
+    u = client.post("/auth/register", json={
+        "email": "sanscv@x.com", "password": "x", "role": "candidat",
+        "nom": "Sans", "prenom": "Cv"}).get_json()
+    r = client.post("/candidatures", json={"candidat_id": u["id"], "offre_id": 5})
+    assert r.status_code == 201
+    assert r.get_json()["score_matching"] == 0.0   # pas de CV -> score nul
+
+
+def test_offre_sans_competences(client):
+    rh = client.post("/auth/login", json={"email": "rh@test.com", "password": "1234"}).get_json()
+    o = client.post("/offres", json={
+        "recruteur_id": rh["id"], "titre": "Stage", "domaine": "Tech",
+        "description": "Découverte", "competences_requises": []}).get_json()
+    r = client.post("/candidatures", json={"candidat_id": 1, "offre_id": o["id"]})
+    assert r.status_code == 201 and 0.0 <= r.get_json()["score_matching"] <= 1.0
+
+
+def test_json_malforme(client):
+    r = client.post("/auth/login", data="{pas du json", content_type="application/json")
+    assert r.status_code == 400
+
+
+def test_get_cv_inexistant(client):
+    u = client.post("/auth/register", json={
+        "email": "nocv@x.com", "password": "x", "role": "candidat",
+        "nom": "No", "prenom": "Cv"}).get_json()
+    assert client.get(f"/cvs?candidat_id={u['id']}").get_json() is None
+
+
+def test_upload_non_pdf_ne_crashe_pas(client):
+    u = client.post("/auth/register", json={
+        "email": "badfile@x.com", "password": "x", "role": "candidat",
+        "nom": "Bad", "prenom": "File"}).get_json()
+    r = client.post("/cvs", data={"candidat_id": str(u["id"]),
+                                  "file": (io.BytesIO(b"ceci n'est pas un pdf"), "fake.pdf")},
+                    content_type="multipart/form-data")
+    assert r.status_code == 201 and isinstance(r.get_json()["skills"], list)
+
+
+# --------------------------------------------------------------------------- #
 # Pipeline IA (Lot B) — ignoré si dépendances absentes
 # --------------------------------------------------------------------------- #
 def _ai_available():

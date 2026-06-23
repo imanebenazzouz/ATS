@@ -61,3 +61,14 @@ cd frontend && streamlit run app.py
 L'URL de l'API est configurable côté front via la variable d'environnement `ATS_API_URL`.
 
 Comptes de démo (mot de passe `1234`) : `candidat@test.com`, `rh@test.com`, `admin@test.com`.
+
+## Tests
+
+```bash
+pip install pytest
+pytest -q                       # tests unitaires + intégration API (base jetable, sans serveur)
+```
+
+Les tests du pipeline IA sont ignorés automatiquement si ses dépendances ne sont pas
+installées. Un test E2E manuel du parcours navigateur (3 rôles + recherche IA) est
+disponible : `tests/manual_ui_e2e.py` (nécessite Playwright + les deux serveurs lancés).
