@@ -10,12 +10,13 @@ import sqlite3
 
 # Racine du projet = dossier parent de backend/
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(ROOT, "ats.db")
+# Chemin de la base, surchargeable via ATS_DB_PATH (pratique pour les tests).
+DB_PATH = os.environ.get("ATS_DB_PATH", os.path.join(ROOT, "ats.db"))
 
 
 def get_connection():
     """Connexion SQLite avec lignes accessibles par nom de colonne."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(os.environ.get("ATS_DB_PATH", DB_PATH))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
