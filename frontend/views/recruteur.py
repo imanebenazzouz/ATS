@@ -9,8 +9,8 @@ from views.chatbot import render_chatbot
 
 def page_recruteur(user):
     st.title(f"Espace recruteur — {user['entreprise']}")
-    tab_offres, tab_candidats, tab_chat = st.tabs(
-        ["Mes offres", "Résultats de matching", "Chatbot LLM"]
+    tab_offres, tab_candidats, tab_search, tab_chat = st.tabs(
+        ["Mes offres", "Résultats de matching", "Recherche IA", "Chatbot LLM"]
     )
 
     with tab_offres:
@@ -19,8 +19,31 @@ def page_recruteur(user):
     with tab_candidats:
         _render_matching_tab(user)
 
+    with tab_search:
+        _render_search_tab()
+
     with tab_chat:
         render_chatbot(user)
+
+
+def _render_search_tab():
+    st.caption("Recherche sémantique : décris le profil recherché en langage naturel.")
+    query = st.text_input("Ex : « data engineer Python et Docker »", key="search_ia")
+    if not query:
+        return
+    resultats, error = api.search_candidats(query)
+    if error:
+        st.warning(error)
+        return
+    if not resultats:
+        st.info("Aucun candidat indexé pour le moment.")
+    for r in resultats:
+        st.markdown(f"""
+        <div class="ats-card">
+            <h4>{avatar(r.get('prenom') or '', r.get('nom') or '')}{r.get('prenom')} {r.get('nom')}</h4>
+            {progress_bar(r['score'])}
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def _render_offres_tab(user):
