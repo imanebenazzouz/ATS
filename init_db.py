@@ -1,11 +1,12 @@
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "ats.db")
+DB_PATH = os.environ.get("ATS_DB_PATH", os.path.join(os.path.dirname(__file__), "ats.db"))
 
 
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
+def init_db(db_path=None):
+    db_path = db_path or os.environ.get("ATS_DB_PATH", DB_PATH)
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     cursor.executescript("""
@@ -125,7 +126,7 @@ def init_db():
 
     conn.commit()
     conn.close()
-    print(f"Base de données initialisée : {DB_PATH}")
+    print(f"Base de données initialisée : {db_path}")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,12 @@
 """Espace admin : utilisateurs, modération des offres, statistiques."""
+import html
+
 import streamlit as st
 
 import api_client as api
 from theme import avatar, status_badge
+
+esc = html.escape
 
 
 def page_admin(user):
@@ -23,8 +27,8 @@ def _render_users_tab(current_user):
     for u in api.list_users():
         with st.container(border=True):
             col1, col2, col3 = st.columns([3, 2, 1])
-            col1.markdown(f"{avatar(u['prenom'], u['nom'])}**{u['prenom']} {u['nom']}**  \n"
-                          f"<span style='color:#888;font-size:0.85rem'>{u['email']}</span>",
+            col1.markdown(f"{avatar(u['prenom'], u['nom'])}**{esc(u['prenom'])} {esc(u['nom'])}**  \n"
+                          f"<span style='color:#888;font-size:0.85rem'>{esc(u['email'])}</span>",
                           unsafe_allow_html=True)
             new_role = col2.selectbox("Rôle", ["candidat", "recruteur", "admin"],
                                        index=["candidat", "recruteur", "admin"].index(u["role"]),
@@ -41,7 +45,7 @@ def _render_offres_tab():
     for offre in api.list_offres():
         with st.container(border=True):
             col1, col2, col3 = st.columns([4, 1, 1])
-            col1.markdown(f"**{offre['titre']}** — {offre['entreprise']} {status_badge(offre['statut'])}",
+            col1.markdown(f"**{esc(offre['titre'])}** — {esc(offre['entreprise'] or '')} {status_badge(offre['statut'])}",
                           unsafe_allow_html=True)
             if offre["statut"] != "active" and col2.button("Valider", key=f"valider_{offre['id']}"):
                 api.set_offre_statut(offre["id"], "active")

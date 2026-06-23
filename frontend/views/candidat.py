@@ -1,9 +1,13 @@
 """Espace candidat : CV, offres, candidatures, chatbot."""
+import html
+
 import streamlit as st
 
 import api_client as api
 from theme import progress_bar, skill_pills, status_badge
 from views.chatbot import render_chatbot
+
+esc = html.escape
 
 
 def page_candidat(user):
@@ -36,12 +40,12 @@ def _render_cv_tab(user):
     if mon_cv:
         st.markdown(f"""
         <div class="ats-card">
-            <h4>{mon_cv['fichier']}</h4>
-            <p style="color:#888; margin-top:0;">Uploadé le {mon_cv['date_upload']}</p>
+            <h4>{esc(mon_cv['fichier'])}</h4>
+            <p style="color:#888; margin-top:0;">Uploadé le {esc(mon_cv['date_upload'])}</p>
             <p><strong>Compétences détectées</strong></p>
             {skill_pills(mon_cv['skills'])}
-            <p style="margin-top:14px;"><strong>Expérience</strong><br>{mon_cv['experience']}</p>
-            <p><strong>Formation</strong><br>{mon_cv['education']}</p>
+            <p style="margin-top:14px;"><strong>Expérience</strong><br>{esc(mon_cv['experience'] or '')}</p>
+            <p><strong>Formation</strong><br>{esc(mon_cv['education'] or '')}</p>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -80,9 +84,9 @@ def _render_offres_tab(user):
     for offre in offres_actives:
         st.markdown(f"""
         <div class="ats-card">
-            <h4>{offre['titre']} <span class="ats-badge badge-pending">{offre['domaine']}</span></h4>
-            <p style="color:#888; margin-top:0;">{offre['entreprise']} — publié le {offre['date_publication']}</p>
-            <p>{offre['description']}</p>
+            <h4>{esc(offre['titre'])} <span class="ats-badge badge-pending">{esc(offre['domaine'] or '')}</span></h4>
+            <p style="color:#888; margin-top:0;">{esc(offre['entreprise'] or '')} — publié le {esc(offre['date_publication'])}</p>
+            <p>{esc(offre['description'] or '')}</p>
             {skill_pills(offre['competences_requises'])}
         </div>
         """, unsafe_allow_html=True)
@@ -110,13 +114,13 @@ def _render_suivi_tab(user):
             continue
         reponse_html = ""
         if c["statut"] != "en attente":
-            message = f" : « {c['message_recruteur']} »" if c.get("message_recruteur") else ""
+            message = f" : « {esc(c['message_recruteur'])} »" if c.get("message_recruteur") else ""
             reponse_html = (f"<p style='margin-top:10px; color:#555;'>Réponse du recruteur le "
-                            f"{c.get('date_reponse') or '—'}{message}</p>")
+                            f"{esc(c.get('date_reponse') or '—')}{message}</p>")
         st.markdown(f"""
         <div class="ats-card">
-            <h4>{offre['titre']} <span style="font-weight:400; color:#888;">— {offre['entreprise']}</span></h4>
-            <p style="color:#888; margin-top:0;">Candidature envoyée le {c['date']}</p>
+            <h4>{esc(offre['titre'])} <span style="font-weight:400; color:#888;">— {esc(offre['entreprise'] or '')}</span></h4>
+            <p style="color:#888; margin-top:0;">Candidature envoyée le {esc(c['date'])}</p>
             {status_badge(c['statut'])}
             {progress_bar(c['score_matching'])}
             {reponse_html}
