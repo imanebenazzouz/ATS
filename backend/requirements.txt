@@ -1,2 +1,7 @@
 flask
 werkzeug
+# Pipeline IA (Lot B)
+pymupdf
+sentence-transformers
+faiss-cpu
+numpy

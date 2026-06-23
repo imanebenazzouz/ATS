@@ -52,6 +52,12 @@ def _render_offres_tab(user):
     offres_actives = api.list_offres(statut="active")
     mes_candidatures = api.list_candidatures(candidat_id=user["id"])
     offres_postulees = {c["offre_id"] for c in mes_candidatures}
+
+    recommandations, _ = api.matching_offres(user["id"])
+    if recommandations:
+        with st.expander("Offres recommandées pour mon profil (IA)", expanded=True):
+            for r in recommandations[:3]:
+                st.markdown(f"**{r['titre']}** — {r['entreprise']} · {round(r['score']*100)}% de correspondance")
     domaines = ["Tous"] + sorted({o["domaine"] for o in offres_actives if o["domaine"]})
 
     col1, col2 = st.columns([1, 2])

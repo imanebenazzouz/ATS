@@ -127,6 +127,33 @@ def respond_candidature(cand_id, statut, message_recruteur=None):
 
 
 # --------------------------------------------------------------------------- #
+# Matching sémantique (Lot B)
+# --------------------------------------------------------------------------- #
+def search_candidats(query):
+    """Recherche RH en langage naturel. Retourne (resultats, error)."""
+    r = requests.post(_url("/search/candidats"), json={"query": query}, timeout=TIMEOUT)
+    if r.status_code == 200:
+        return r.json(), None
+    return None, r.json().get("error", "Erreur inconnue.")
+
+
+def matching_candidats(offre_id):
+    """Candidats classés pour une offre (offre -> CV). Retourne (resultats, error)."""
+    r = requests.get(_url("/matching/candidats"), params={"offre_id": offre_id}, timeout=TIMEOUT)
+    if r.status_code == 200:
+        return r.json(), None
+    return None, r.json().get("error", "Erreur inconnue.")
+
+
+def matching_offres(candidat_id):
+    """Offres recommandées pour un candidat (CV -> offres). Retourne (resultats, error)."""
+    r = requests.get(_url("/matching/offres"), params={"candidat_id": candidat_id}, timeout=TIMEOUT)
+    if r.status_code == 200:
+        return r.json(), None
+    return None, r.json().get("error", "Erreur inconnue.")
+
+
+# --------------------------------------------------------------------------- #
 # Stats
 # --------------------------------------------------------------------------- #
 def get_stats():

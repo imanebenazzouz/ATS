@@ -16,6 +16,7 @@ from flask import Flask, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
+from backend.ai import pipeline
 from backend.db import dumps, get_connection, loads
 
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
@@ -203,8 +204,16 @@ def create_offre():
         (data["recruteur_id"], data["titre"], data.get("domaine"), data.get("description"),
          dumps(data.get("competences_requises", [])), today()),
     )
+    offre_id = cur.lastrowid
+    # Pipeline IA (Lot B) : l'offre est aussi chunked + embedded (matching bidirectionnel).
+    if pipeline.AVAILABLE:
+        try:
+            pipeline.index_offre(conn, offre_id, data["titre"], data.get("domaine"),
+                                 data.get("description"), data.get("competences_requises", []))
+        except Exception as exc:
+            app.logger.warning("Pipeline offre échoué: %s", exc)
     conn.commit()
-    row = conn.execute(OFFRE_SELECT + " WHERE o.id = ?", (cur.lastrowid,)).fetchone()
+    row = conn.execute(OFFRE_SELECT + " WHERE o.id = ?", (offre_id,)).fetchone()
     conn.close()
     return jsonify(offre_to_dict(row)), 201
 
@@ -246,10 +255,11 @@ def get_cv():
 
 @app.post("/cvs")
 def upload_cv():
-    """Reçoit le PDF (multipart) + candidat_id, le stocke et crée la fiche CV.
+    """Reçoit le PDF (multipart) + candidat_id, le stocke et lance le pipeline IA.
 
-    L'extraction réelle (texte, skills, sections) est faite par le Lot B ; ici on
-    enregistre le fichier et des valeurs placeholder pour que le front reste fonctionnel.
+    Pipeline (Lot B) : extraction PDF -> chunking -> embeddings -> stockage des chunks.
+    Si les dépendances du pipeline sont absentes, on retombe sur des valeurs placeholder
+    pour que le front reste fonctionnel.
     """
     candidat_id = request.form.get("candidat_id")
     file = request.files.get("file")
@@ -260,19 +270,36 @@ def upload_cv():
     path = os.path.join(UPLOAD_DIR, filename)
     file.save(path)
 
-    placeholder_skills = ["Python", "NLP", "Docker"]  # remplacé par le pipeline Lot B
     conn = get_connection()
     # un seul CV courant par candidat : on remplace l'ancien
     conn.execute("DELETE FROM cvs WHERE candidat_id = ?", (candidat_id,))
     cur = conn.execute(
-        """INSERT INTO cvs (candidat_id, fichier_path, texte_brut, skills, experience,
-                            education, date_upload)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (candidat_id, path, None, dumps(placeholder_skills),
-         "Expérience extraite (placeholder Lot B)", "Formation extraite (placeholder Lot B)", today()),
+        "INSERT INTO cvs (candidat_id, fichier_path, date_upload) VALUES (?, ?, ?)",
+        (candidat_id, path, today()),
+    )
+    cv_id = cur.lastrowid
+
+    # Pipeline IA (Lot B) : extraction PDF -> chunking -> embeddings -> stockage chunks.
+    # Si indisponible, on garde des valeurs placeholder (le front reste fonctionnel).
+    if pipeline.AVAILABLE:
+        try:
+            infos = pipeline.index_cv(conn, cv_id, path)
+        except Exception as exc:  # PDF illisible, etc. -> placeholder
+            app.logger.warning("Pipeline CV échoué: %s", exc)
+            infos = None
+    else:
+        infos = None
+    if infos is None:
+        infos = {"texte_brut": None, "skills": ["Python", "NLP", "Docker"],
+                 "experience": "Expérience extraite (placeholder)",
+                 "education": "Formation extraite (placeholder)"}
+
+    conn.execute(
+        "UPDATE cvs SET texte_brut = ?, skills = ?, experience = ?, education = ? WHERE id = ?",
+        (infos["texte_brut"], dumps(infos["skills"]), infos["experience"], infos["education"], cv_id),
     )
     conn.commit()
-    row = conn.execute("SELECT * FROM cvs WHERE id = ?", (cur.lastrowid,)).fetchone()
+    row = conn.execute("SELECT * FROM cvs WHERE id = ?", (cv_id,)).fetchone()
     conn.close()
     return jsonify(cv_to_dict(row)), 201
 
@@ -320,7 +347,17 @@ def create_candidature():
     if not offre:
         conn.close()
         return jsonify({"error": "Offre introuvable."}), 404
-    score = _compute_score(conn, candidat_id, offre)
+
+    # Score réel par similarité cosinus (Lot B) si disponible, sinon intersection (Lot A).
+    score = None
+    if pipeline.AVAILABLE:
+        cv = conn.execute(
+            "SELECT id FROM cvs WHERE candidat_id = ? ORDER BY id DESC LIMIT 1", (candidat_id,)
+        ).fetchone()
+        if cv:
+            score = pipeline.score_cv_offre(conn, cv["id"], offre_id)
+    if score is None:
+        score = _compute_score(conn, candidat_id, offre)
     try:
         cur = conn.execute(
             """INSERT INTO candidatures (candidat_id, offre_id, date, statut, score_matching)
@@ -353,6 +390,74 @@ def respond_candidature(cand_id):
     row = conn.execute("SELECT * FROM candidatures WHERE id = ?", (cand_id,)).fetchone()
     conn.close()
     return jsonify(candidature_to_dict(row))
+
+
+# --------------------------------------------------------------------------- #
+# Matching sémantique (Lot B) — embeddings MiniLM + FAISS + cosinus
+# --------------------------------------------------------------------------- #
+def _require_pipeline():
+    if not pipeline.AVAILABLE:
+        return jsonify({"error": "Pipeline IA indisponible (dépendances non installées)."}), 503
+    return None
+
+
+@app.get("/matching/candidats")
+def matching_candidats():
+    """offre -> CV : candidats les plus pertinents pour une offre (cosinus)."""
+    err = _require_pipeline()
+    if err:
+        return err
+    offre_id = request.args.get("offre_id")
+    conn = get_connection()
+    resultats = pipeline.rank_candidates_for_offre(conn, offre_id)
+    for r in resultats:
+        u = conn.execute("SELECT prenom, nom FROM users WHERE id = ?", (r["candidat_id"],)).fetchone()
+        r["prenom"], r["nom"] = (u["prenom"], u["nom"]) if u else (None, None)
+    conn.close()
+    return jsonify(resultats)
+
+
+@app.get("/matching/offres")
+def matching_offres():
+    """CV -> offres : offres actives les plus pertinentes pour un candidat (cosinus)."""
+    err = _require_pipeline()
+    if err:
+        return err
+    candidat_id = request.args.get("candidat_id")
+    conn = get_connection()
+    cv = conn.execute(
+        "SELECT id FROM cvs WHERE candidat_id = ? ORDER BY id DESC LIMIT 1", (candidat_id,)
+    ).fetchone()
+    if not cv:
+        conn.close()
+        return jsonify([])
+    offre_ids = [r["id"] for r in conn.execute("SELECT id FROM offres WHERE statut = 'active'").fetchall()]
+    classement = pipeline.rank_offres_for_candidate(conn, cv["id"], offre_ids)
+    resultats = []
+    for offre_id, score in classement:
+        o = conn.execute(OFFRE_SELECT + " WHERE o.id = ?", (offre_id,)).fetchone()
+        resultats.append({"offre_id": offre_id, "score": score, "titre": o["titre"],
+                          "entreprise": o["entreprise"], "domaine": o["domaine"]})
+    conn.close()
+    return jsonify(resultats)
+
+
+@app.post("/search/candidats")
+def search_candidats():
+    """Recherche RH en langage naturel -> candidats classés (requête FAISS). Sujet §7."""
+    err = _require_pipeline()
+    if err:
+        return err
+    query = request.get_json(force=True).get("query", "").strip()
+    if not query:
+        return jsonify({"error": "Requête vide."}), 400
+    conn = get_connection()
+    resultats = pipeline.search_candidates(conn, query)
+    for r in resultats:
+        u = conn.execute("SELECT prenom, nom FROM users WHERE id = ?", (r["candidat_id"],)).fetchone()
+        r["prenom"], r["nom"] = (u["prenom"], u["nom"]) if u else (None, None)
+    conn.close()
+    return jsonify(resultats)
 
 
 # --------------------------------------------------------------------------- #
