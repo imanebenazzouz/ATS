@@ -1,10 +1,14 @@
 """Espace recruteur : offres, résultats de matching, chatbot."""
+import html
+
 import streamlit as st
 
 import api_client as api
 from mock_data import mock_llm_explanation
 from theme import avatar, progress_bar, skill_pills, status_badge
 from views.chatbot import render_chatbot
+
+esc = html.escape
 
 
 def page_recruteur(user):
@@ -40,7 +44,7 @@ def _render_search_tab():
     for r in resultats:
         st.markdown(f"""
         <div class="ats-card">
-            <h4>{avatar(r.get('prenom') or '', r.get('nom') or '')}{r.get('prenom')} {r.get('nom')}</h4>
+            <h4>{avatar(r.get('prenom') or '', r.get('nom') or '')}{esc(r.get('prenom') or '')} {esc(r.get('nom') or '')}</h4>
             {progress_bar(r['score'])}
         </div>
         """, unsafe_allow_html=True)
@@ -67,9 +71,9 @@ def _render_offres_tab(user):
     for offre in mes_offres:
         st.markdown(f"""
         <div class="ats-card">
-            <h4>{offre['titre']} {status_badge(offre['statut'])}</h4>
-            <p style="color:#888; margin-top:0;">{offre['domaine']}</p>
-            <p>{offre['description']}</p>
+            <h4>{esc(offre['titre'])} {status_badge(offre['statut'])}</h4>
+            <p style="color:#888; margin-top:0;">{esc(offre['domaine'] or '')}</p>
+            <p>{esc(offre['description'] or '')}</p>
             {skill_pills(offre['competences_requises'])}
         </div>
         """, unsafe_allow_html=True)
@@ -92,7 +96,7 @@ def _render_matching_tab(user):
         cv = api.get_cv(c["candidat_id"])
         st.markdown(f"""
         <div class="ats-card">
-            <h4>{avatar(candidat['prenom'], candidat['nom'])}{candidat['prenom']} {candidat['nom']} {status_badge(c['statut'])}</h4>
+            <h4>{avatar(candidat['prenom'], candidat['nom'])}{esc(candidat['prenom'])} {esc(candidat['nom'])} {status_badge(c['statut'])}</h4>
             {progress_bar(c['score_matching'])}
         </div>
         """, unsafe_allow_html=True)

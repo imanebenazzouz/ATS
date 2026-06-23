@@ -1,4 +1,6 @@
 """CSS du thème + helpers de rendu HTML (pills, badges, barres de progression, avatars)."""
+import html
+
 import streamlit as st
 
 PRIMARY = "#2d3a8c"
@@ -133,7 +135,7 @@ def inject_css():
 
 
 def skill_pills(skills):
-    return "".join(f"<span class='ats-pill'>{s}</span>" for s in skills)
+    return "".join(f"<span class='ats-pill'>{html.escape(str(s))}</span>" for s in skills)
 
 
 def status_badge(statut: str) -> str:
@@ -144,7 +146,7 @@ def status_badge(statut: str) -> str:
         "refusée": ("badge-rejected", "Refusée"),
         "pending": ("badge-pending", "En attente"),
     }
-    cls, label = mapping.get(statut, ("badge-pending", statut.capitalize()))
+    cls, label = mapping.get(statut, ("badge-pending", html.escape(str(statut)).capitalize()))
     return f"<span class='ats-badge {cls}'>{label}</span>"
 
 
@@ -155,5 +157,5 @@ def progress_bar(score: float) -> str:
 
 
 def avatar(prenom: str, nom: str) -> str:
-    initials = (prenom[:1] + nom[:1]).upper()
+    initials = html.escape((prenom[:1] + nom[:1]).upper())
     return f"<span class='ats-avatar'>{initials}</span>"
