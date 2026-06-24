@@ -4,4 +4,5 @@ __pycache__/
 venv/
 *.db
 backend/uploads/
+samples/
 .streamlit/secrets.toml

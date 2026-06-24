@@ -1,0 +1,12 @@
+# Force un thème clair cohérent quel que soit le mode (clair/sombre) du navigateur,
+# pour éviter le texte clair illisible sur les cartes blanches.
+[theme]
+base = "light"
+primaryColor = "#4f46e5"
+backgroundColor = "#f5f7fb"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#1e293b"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
