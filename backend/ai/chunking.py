@@ -19,12 +19,17 @@ SECTION_PATTERNS = [
 
 
 def _match_section(line):
-    """Retourne le type de section si la ligne est un titre, sinon None."""
+    """Retourne le type de section si la ligne est un titre, sinon None.
+
+    Un titre est une ligne courte (<= 45 car., <= 4 mots) contenant un mot-clé de
+    section — ce qui couvre « Compétences techniques », « Expériences professionnelles »,
+    « Projets & side projects », etc. (et pas seulement le mot-clé seul).
+    """
     stripped = line.strip().rstrip(":").strip()
-    if not stripped or len(stripped) > 40:
+    if not stripped or len(stripped) > 45 or len(stripped.split()) > 4:
         return None
     for pattern, type_section in SECTION_PATTERNS:
-        if pattern.fullmatch(stripped):
+        if pattern.search(stripped):
             return type_section
     return None
 
@@ -49,7 +54,8 @@ def chunk_text(text):
     """
     lines = [l for l in text.splitlines()]
     sections = []           # (type_section, [lignes de contenu])
-    current = None
+    current = []            # le texte avant le premier titre va dans 'profil'
+    sections.append(("profil", current))
 
     for line in lines:
         inline = _split_inline(line)
@@ -72,6 +78,10 @@ def chunk_text(text):
         if contenu:
             chunks.append({"type_section": type_section, "contenu": contenu})
 
+    # Aucun titre reconnu -> tout le texte est du 'divers' (et non du 'profil')
+    if len(chunks) == 1 and chunks[0]["type_section"] == "profil":
+        chunks[0]["type_section"] = "divers"
+
     if not chunks:
         cleaned = " ".join(l.strip() for l in lines if l.strip())
         if cleaned:
@@ -80,12 +90,22 @@ def chunk_text(text):
 
 
 def extract_skills(chunks):
-    """Liste de compétences à partir du chunk 'skills' (pour la fiche CV du front)."""
-    for c in chunks:
-        if c["type_section"] == "skills":
-            tokens = re.split(r"[,;/\n•|]+", c["contenu"])
-            return [t.strip() for t in tokens if t.strip()][:20]
-    return []
+    """Liste de compétences à partir du/des chunk(s) 'skills' (pour la fiche CV du front).
+
+    Gère les formats du type « Langages : JavaScript, Python | Frameworks : React, ... » :
+    on découpe sur les séparateurs et on retire les préfixes de label (« Langages : »).
+    """
+    contenu = " ".join(c["contenu"] for c in chunks if c["type_section"] == "skills")
+    if not contenu:
+        return []
+    skills, seen = [], set()
+    for token in re.split(r"[,;/\n•|]+", contenu):
+        token = re.sub(r"^[A-Za-zÀ-ÿ &.]{2,22}\s*:\s*", "", token.strip()).strip()
+        key = token.lower()
+        if token and 1 < len(token) <= 30 and key not in seen:
+            seen.add(key)
+            skills.append(token)
+    return skills[:20]
 
 
 def section_text(chunks, type_section):
