@@ -1,20 +1,27 @@
-"""Chatbot LLM partagé entre les vues candidat et recruteur."""
+"""Chatbot LLM (Lot C) — partagé entre les vues candidat et recruteur.
+
+Branché sur l'API Flask : historique persisté en base (chatbot_sessions /
+conseils_llm), réponse générée par un vrai LLM (backend/llm.py).
+"""
 import streamlit as st
-from mock_data import mock_llm_chat_reply
+
+import api_client as api
 
 
 def render_chatbot(user):
-    history = st.session_state.chatbot_history.setdefault(user["id"], [])
+    history = api.chatbot_history(user["id"])
     for msg in history:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
+        with st.chat_message("user"):
+            st.write(msg["question"])
+        with st.chat_message("assistant"):
+            st.write(msg["reponse"])
 
     question = st.chat_input("Pose ta question au copilote LLM...")
     if question:
-        history.append({"role": "user", "content": question})
         with st.chat_message("user"):
             st.write(question)
-        reply = mock_llm_chat_reply(question, user["role"])
-        history.append({"role": "assistant", "content": reply})
         with st.chat_message("assistant"):
-            st.write(reply)
+            with st.spinner("Le copilote réfléchit..."):
+                reponse, error = api.chatbot_message(user["id"], user["role"], question)
+            st.write(reponse or f"Erreur : {error}")
+        st.rerun()

@@ -16,6 +16,7 @@ from flask import Flask, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
+from backend import llm
 from backend.ai import pipeline
 from backend.db import dumps, get_connection, loads
 
@@ -458,6 +459,99 @@ def search_candidats():
         r["prenom"], r["nom"] = (u["prenom"], u["nom"]) if u else (None, None)
     conn.close()
     return jsonify(resultats)
+
+
+# --------------------------------------------------------------------------- #
+# LLM copilote (Lot C) — explication des matchs + chatbot
+# --------------------------------------------------------------------------- #
+@app.post("/matching/explain")
+def explain_match():
+    """Sujet §8.1 : explication LLM d'un score de matching CV <-> offre (persistée)."""
+    data = request.get_json(force=True)
+    candidat_id, offre_id = data.get("candidat_id"), data.get("offre_id")
+    conn = get_connection()
+
+    cv = conn.execute(
+        "SELECT skills, experience FROM cvs WHERE candidat_id = ? ORDER BY id DESC LIMIT 1", (candidat_id,)
+    ).fetchone()
+    offre = conn.execute(OFFRE_SELECT + " WHERE o.id = ?", (offre_id,)).fetchone()
+    cand = conn.execute(
+        "SELECT score_matching FROM candidatures WHERE candidat_id = ? AND offre_id = ?",
+        (candidat_id, offre_id),
+    ).fetchone()
+    if not offre:
+        conn.close()
+        return jsonify({"error": "Offre introuvable."}), 404
+
+    skills = loads(cv["skills"]) if cv else []
+    experience = cv["experience"] if cv else None
+    score = cand["score_matching"] if cand else None
+
+    try:
+        explication = llm.explain_match(skills, experience, offre["titre"],
+                                        loads(offre["competences_requises"]), score)
+    except Exception as exc:
+        conn.close()
+        return jsonify({"error": f"LLM indisponible : {exc}"}), 503
+
+    conn.execute(
+        """INSERT INTO matching_results (candidat_id, offre_id, score, explication_llm)
+           VALUES (?, ?, ?, ?)""",
+        (candidat_id, offre_id, score or 0.0, explication),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"explication": explication})
+
+
+@app.post("/chatbot/message")
+def chatbot_message():
+    """Sujet §8 : message du copilote, persisté dans chatbot_sessions/conseils_llm."""
+    data = request.get_json(force=True)
+    user_id, role, question = data.get("user_id"), data.get("role"), data.get("question", "").strip()
+    if not question:
+        return jsonify({"error": "Question vide."}), 400
+
+    conn = get_connection()
+    session = conn.execute(
+        "SELECT id FROM chatbot_sessions WHERE user_id = ? ORDER BY id DESC LIMIT 1", (user_id,)
+    ).fetchone()
+    if session:
+        session_id = session["id"]
+    else:
+        cur = conn.execute(
+            "INSERT INTO chatbot_sessions (user_id, role_user) VALUES (?, ?)", (user_id, role)
+        )
+        session_id = cur.lastrowid
+
+    try:
+        reponse = llm.chat_reply(question, role)
+    except Exception as exc:
+        conn.close()
+        return jsonify({"error": f"LLM indisponible : {exc}"}), 503
+
+    conn.execute(
+        "INSERT INTO conseils_llm (session_id, question, reponse_llm) VALUES (?, ?, ?)",
+        (session_id, question, reponse),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"reponse": reponse})
+
+
+@app.get("/chatbot/history")
+def chatbot_history():
+    user_id = request.args.get("user_id")
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT c.question, c.reponse_llm, c.timestamp
+           FROM conseils_llm c JOIN chatbot_sessions s ON s.id = c.session_id
+           WHERE s.user_id = ? ORDER BY c.id""",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return jsonify([{"question": r["question"], "reponse": r["reponse_llm"], "timestamp": r["timestamp"]}
+                    for r in rows])
 
 
 # --------------------------------------------------------------------------- #

@@ -4,7 +4,6 @@ import html
 import streamlit as st
 
 import api_client as api
-from mock_data import mock_llm_explanation
 from theme import avatar, card, match_chip, progress_bar, skill_pills, status_badge
 from views.chatbot import render_chatbot
 
@@ -80,7 +79,15 @@ def _render_matching_tab(user):
         ), unsafe_allow_html=True)
         if cv:
             with st.expander("🤖 Explication du matching (LLM)"):
-                st.write(mock_llm_explanation(cv["skills"], offre["competences_requises"]))
+                cache_key = f"explain_{c['candidat_id']}_{offre['id']}"
+                if cache_key not in st.session_state:
+                    if st.button("Générer l'explication", key=f"btn_{cache_key}"):
+                        with st.spinner("Le copilote analyse le profil..."):
+                            explication, error = api.explain_match(c["candidat_id"], offre["id"])
+                        st.session_state[cache_key] = explication or f"Erreur : {error}"
+                        st.rerun()
+                else:
+                    st.write(st.session_state[cache_key])
 
         if c["statut"] == "en attente":
             with st.form(f"rep_{c['id']}", clear_on_submit=True):

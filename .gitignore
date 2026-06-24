@@ -6,3 +6,4 @@ venv/
 backend/uploads/
 samples/
 .streamlit/secrets.toml
+.env

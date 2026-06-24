@@ -5,3 +5,7 @@ pymupdf
 sentence-transformers
 faiss-cpu
 numpy
+# LLM copilote (Lot C)
+requests
+python-dotenv
+ddgs

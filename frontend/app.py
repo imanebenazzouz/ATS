@@ -1,8 +1,7 @@
 """
 ATS Intelligent — Frontend Streamlit
 Point d'entrée : applique le thème, route vers la bonne vue selon le rôle.
-Les données proviennent de l'API Flask (voir api_client.py) ; seul l'historique
-de chat reste local (mock_data.py, en attendant le Lot C).
+Toutes les données (y compris le chat copilote) viennent de l'API Flask (api_client.py).
 """
 import html
 
@@ -10,7 +9,6 @@ import requests
 import streamlit as st
 
 import api_client as api
-from mock_data import init_session_state
 from theme import avatar, inject_css
 
 esc = html.escape
@@ -21,7 +19,6 @@ from views.recruteur import page_recruteur
 
 st.set_page_config(page_title="ATS Intelligent", layout="wide")
 inject_css()
-init_session_state()
 
 if "current_user_id" not in st.session_state:
     page_login()

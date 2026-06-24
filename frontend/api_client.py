@@ -154,6 +154,36 @@ def matching_offres(candidat_id):
 
 
 # --------------------------------------------------------------------------- #
+# LLM copilote (Lot C)
+# --------------------------------------------------------------------------- #
+LLM_TIMEOUT = 45  # les modèles gratuits OpenRouter peuvent être lents
+
+
+def explain_match(candidat_id, offre_id):
+    """Retourne (explication, error)."""
+    r = requests.post(_url("/matching/explain"), json={
+        "candidat_id": candidat_id, "offre_id": offre_id,
+    }, timeout=LLM_TIMEOUT)
+    if r.status_code == 200:
+        return r.json()["explication"], None
+    return None, r.json().get("error", "Erreur inconnue.")
+
+
+def chatbot_message(user_id, role, question):
+    """Retourne (reponse, error)."""
+    r = requests.post(_url("/chatbot/message"), json={
+        "user_id": user_id, "role": role, "question": question,
+    }, timeout=LLM_TIMEOUT)
+    if r.status_code == 200:
+        return r.json()["reponse"], None
+    return None, r.json().get("error", "Erreur inconnue.")
+
+
+def chatbot_history(user_id):
+    return requests.get(_url("/chatbot/history"), params={"user_id": user_id}, timeout=TIMEOUT).json()
+
+
+# --------------------------------------------------------------------------- #
 # Stats
 # --------------------------------------------------------------------------- #
 def get_stats():
