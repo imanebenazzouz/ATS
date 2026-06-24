@@ -22,7 +22,15 @@ BORDER = "#e6e8f0"
 def inject_css():
     st.markdown(f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
     /* ---------- Base : couleurs de texte explicites (anti texte-blanc-sur-blanc) ---------- */
+    html, body, .stApp, [class*="css"], .stMarkdown, input, textarea, button, select {{
+        font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }}
+    h1, h2, h3, h4, h5, .ats-card h4, .ats-hero h1 {{
+        font-family: 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing: -0.01em;
+    }}
     .stApp {{ background: {BG}; }}
     .stApp, .stApp p, .stApp li, .stApp label, .stMarkdown,
     div[data-testid="stMarkdownContainer"] {{ color: {INK}; }}
@@ -86,6 +94,18 @@ def inject_css():
     .badge-active   {{ background: #dcfce7; color: #15803d !important; }}
     .badge-pending  {{ background: #fef3c7; color: #b45309 !important; }}
     .badge-rejected {{ background: #fee2e2; color: #b91c1c !important; }}
+
+    /* ---------- Chip de matching + ruban recommandé ---------- */
+    .ats-match {{
+        display: inline-block; border-radius: 999px; padding: 3px 11px;
+        font-size: 0.78rem; font-weight: 700; vertical-align: middle;
+    }}
+    .ats-reco {{
+        display: inline-block; background: linear-gradient(90deg, {ACCENT}, {PRIMARY});
+        color: #fff !important; border-radius: 999px; padding: 3px 11px;
+        font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; vertical-align: middle;
+    }}
+    .ats-card.reco {{ border: 1.5px solid {PRIMARY}; box-shadow: 0 6px 22px rgba(79,70,229,0.14); }}
 
     /* ---------- Barre de progression (matching) ---------- */
     .ats-progress-track {{
@@ -168,9 +188,22 @@ def compact(html_str: str) -> str:
     return " ".join(line.strip() for line in html_str.splitlines() if line.strip())
 
 
-def card(inner_html: str) -> str:
+def card(inner_html: str, extra_class: str = "") -> str:
     """Enveloppe un contenu HTML dans une carte (rendu fiable, une seule ligne)."""
-    return compact(f"<div class='ats-card'>{inner_html}</div>")
+    cls = f"ats-card {extra_class}".strip()
+    return compact(f"<div class='{cls}'>{inner_html}</div>")
+
+
+def match_chip(score) -> str:
+    """Chip coloré « XX% match » (vert/ambre/gris selon le score)."""
+    pct = round((score or 0) * 100)
+    bg, fg = ("#dcfce7", "#15803d") if pct >= 50 else \
+             ("#fef3c7", "#b45309") if pct >= 25 else ("#e2e8f0", "#475569")
+    return f"<span class='ats-match' style='background:{bg};color:{fg} !important'>{pct}% match</span>"
+
+
+def reco_badge() -> str:
+    return "<span class='ats-reco'>★ Recommandé</span>"
 
 
 def skill_pills(skills):

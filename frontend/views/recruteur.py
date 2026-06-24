@@ -5,7 +5,7 @@ import streamlit as st
 
 import api_client as api
 from mock_data import mock_llm_explanation
-from theme import avatar, card, progress_bar, skill_pills, status_badge
+from theme import avatar, card, match_chip, progress_bar, skill_pills, status_badge
 from views.chatbot import render_chatbot
 
 esc = html.escape
@@ -66,7 +66,7 @@ def _render_matching_tab(user):
         return
 
     cands = api.list_candidatures(offre_id=offre["id"])
-    st.caption(f"{len(cands)} candidature(s) — triées par score de matching")
+    st.caption(f"{len(cands)} candidature(s) — score de matching calculé automatiquement (cosinus), meilleur en haut")
     if not cands:
         st.info("Aucune candidature pour cette offre.")
         return
@@ -76,7 +76,7 @@ def _render_matching_tab(user):
         cv = api.get_cv(c["candidat_id"])
         st.markdown(card(
             f"<h4>{avatar(candidat['prenom'], candidat['nom'])}{esc(candidat['prenom'])} {esc(candidat['nom'])} "
-            f"{status_badge(c['statut'])}</h4>{progress_bar(c['score_matching'])}"
+            f"{match_chip(c['score_matching'])} {status_badge(c['statut'])}</h4>{progress_bar(c['score_matching'])}"
         ), unsafe_allow_html=True)
         if cv:
             with st.expander("🤖 Explication du matching (LLM)"):
@@ -111,9 +111,9 @@ def _render_search_tab():
     if not results:
         st.info("Aucun candidat indexé ne correspond.")
         return
-    st.caption(f"{len(results)} candidat(s) trouvé(s)")
+    st.caption(f"{len(results)} candidat(s) trouvé(s) — parmi **tous** les candidats inscrits (pas seulement ceux qui ont postulé)")
     for r in results:
         st.markdown(card(
-            f"<h4>{avatar(r.get('prenom') or '', r.get('nom') or '')}{esc(r.get('prenom') or '')} {esc(r.get('nom') or '')}</h4>"
-            f"{progress_bar(r['score'])}"
+            f"<h4>{avatar(r.get('prenom') or '', r.get('nom') or '')}{esc(r.get('prenom') or '')} {esc(r.get('nom') or '')} "
+            f"{match_chip(r['score'])}</h4>{progress_bar(r['score'])}"
         ), unsafe_allow_html=True)
