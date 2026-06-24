@@ -72,7 +72,7 @@ def init_db(db_path=None):
             candidat_id     INTEGER NOT NULL,
             offre_id        INTEGER NOT NULL,
             date            DATETIME DEFAULT CURRENT_TIMESTAMP,
-            statut          TEXT DEFAULT 'en attente' CHECK(statut IN ('en attente', 'acceptée', 'refusée')),
+            statut          TEXT DEFAULT 'en_attente' CHECK(statut IN ('en_attente', 'acceptee', 'refusee')),
             score_matching  REAL,
             message_recruteur TEXT,
             date_reponse    TEXT,

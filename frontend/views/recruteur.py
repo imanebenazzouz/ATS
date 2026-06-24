@@ -82,14 +82,14 @@ def _render_matching_tab(user):
             with st.expander("🤖 Explication du matching (LLM)"):
                 st.write(mock_llm_explanation(cv["skills"], offre["competences_requises"]))
 
-        if c["statut"] == "en attente":
+        if c["statut"] == "en_attente":
             with st.form(f"rep_{c['id']}", clear_on_submit=True):
                 message = st.text_input("Message au candidat (optionnel)")
                 col1, col2 = st.columns(2)
                 acc = col1.form_submit_button("✅ Accepter", type="primary", use_container_width=True)
                 ref = col2.form_submit_button("✕ Refuser", use_container_width=True)
                 if acc or ref:
-                    api.respond_candidature(c["id"], "acceptée" if acc else "refusée", message.strip())
+                    api.respond_candidature(c["id"], "acceptee" if acc else "refusee", message.strip())
                     st.toast("Réponse envoyée", icon="📨")
                     st.rerun()
         else:

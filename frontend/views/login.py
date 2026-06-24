@@ -25,7 +25,7 @@ def _render_login():
     with st.form("login", clear_on_submit=False):
         email = st.text_input("Email")
         password = st.text_input("Mot de passe", type="password")
-        st.caption("Comptes de démo : candidat@test.com / rh@test.com / admin@test.com — mdp `1234`")
+        st.caption("Comptes de démo : candidat@test.com / rec@test.com / admin@ats.com — mdp `1234`")
         ok = st.form_submit_button("Se connecter", use_container_width=True, type="primary")
     if ok:
         user = api.login(email.strip(), password)
@@ -37,14 +37,12 @@ def _render_login():
 
 
 def _render_register():
-    with st.form("register", clear_on_submit=True):
+    with st.form("register", clear_on_submit=False):
         col1, col2 = st.columns(2)
         nom = col1.text_input("Nom")
         prenom = col2.text_input("Prénom")
         new_email = st.text_input("Email")
         new_password = st.text_input("Mot de passe", type="password")
-        role = st.selectbox("Je suis…", ["candidat", "recruteur"])
-        entreprise = st.text_input("Entreprise (si recruteur)")
         ok = st.form_submit_button("Créer le compte", use_container_width=True, type="primary")
     if ok:
         if not all([nom.strip(), prenom.strip(), new_email.strip(), new_password]):
@@ -53,7 +51,7 @@ def _render_register():
             st.warning("Le mot de passe doit faire au moins 4 caractères.")
         else:
             user, error = api.register(nom.strip(), prenom.strip(), new_email.strip(),
-                                       new_password, role, entreprise.strip() or None)
+                                       new_password, "candidat", None)
             if user:
                 st.success("Compte créé ! Connecte-toi via l'onglet « Se connecter ».")
             else:

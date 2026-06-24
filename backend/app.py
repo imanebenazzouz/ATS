@@ -361,7 +361,7 @@ def create_candidature():
     try:
         cur = conn.execute(
             """INSERT INTO candidatures (candidat_id, offre_id, date, statut, score_matching)
-               VALUES (?, ?, ?, 'en attente', ?)""",
+               VALUES (?, ?, ?, 'en_attente', ?)""",
             (candidat_id, offre_id, today(), score),
         )
         conn.commit()
@@ -379,7 +379,7 @@ def create_candidature():
 def respond_candidature(cand_id):
     data = request.get_json(force=True)
     statut = data.get("statut")
-    if statut not in ("acceptée", "refusée"):
+    if statut not in ("acceptee", "refusee"):
         return jsonify({"error": "Statut invalide."}), 400
     conn = get_connection()
     conn.execute(
