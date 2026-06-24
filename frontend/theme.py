@@ -215,9 +215,9 @@ def skill_pills(skills):
 def status_badge(statut: str) -> str:
     mapping = {
         "active": ("badge-active", "Active"),
-        "en attente": ("badge-pending", "En attente"),
-        "acceptée": ("badge-active", "Acceptée"),
-        "refusée": ("badge-rejected", "Refusée"),
+        "en_attente": ("badge-pending", "En attente"),
+        "acceptee": ("badge-active", "Acceptée"),
+        "refusee": ("badge-rejected", "Refusée"),
         "pending": ("badge-pending", "En attente"),
         "inactive": ("badge-rejected", "Inactive"),
     }

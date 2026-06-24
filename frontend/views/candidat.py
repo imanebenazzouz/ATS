@@ -130,7 +130,7 @@ def _render_suivi_tab(user):
         if not offre:
             continue
         reponse = ""
-        if c["statut"] != "en attente":
+        if c["statut"] != "en_attente":
             msg = f" : « {esc(c['message_recruteur'])} »" if c.get("message_recruteur") else ""
             reponse = (f"<p style='margin-top:10px;color:#475569'>Réponse du recruteur le "
                        f"{esc(c.get('date_reponse') or '—')}{msg}</p>")

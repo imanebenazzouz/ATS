@@ -11,9 +11,9 @@ from werkzeug.security import generate_password_hash
 from backend.db import dumps, get_connection
 
 USERS = [
-    ("candidat@test.com", "candidat", "Doe", "John", None),
-    ("rh@test.com", "recruteur", "Martin", "Alice", "TechCorp"),
-    ("admin@test.com", "admin", "Admin", "Super", None),
+    ("candidat@test.com", "candidat", "Dupont", "Alice", None),
+    ("rec@test.com", "recruteur", "Martin", "Bob", "TechCorp"),
+    ("admin@ats.com", "admin", "Admin", "Super", None),
 ]
 
 CV_JOHN = {
@@ -61,7 +61,7 @@ def seed():
         )
 
     candidat_id = conn.execute("SELECT id FROM users WHERE email = 'candidat@test.com'").fetchone()[0]
-    recruteur_id = conn.execute("SELECT id FROM users WHERE email = 'rh@test.com'").fetchone()[0]
+    recruteur_id = conn.execute("SELECT id FROM users WHERE email = 'rec@test.com'").fetchone()[0]
 
     conn.execute(
         """INSERT INTO cvs (candidat_id, fichier_path, skills, experience, education, date_upload)
@@ -82,7 +82,7 @@ def seed():
     offre_de = conn.execute("SELECT id FROM offres WHERE titre = 'Data Engineer'").fetchone()[0]
     conn.execute(
         """INSERT INTO candidatures (candidat_id, offre_id, date, statut, score_matching)
-           VALUES (?, ?, '2026-06-15', 'en attente', 0.82)""",
+           VALUES (?, ?, '2026-06-15', 'en_attente', 0.82)""",
         (candidat_id, offre_de),
     )
 
