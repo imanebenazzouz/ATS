@@ -46,6 +46,26 @@ def _split_inline(line):
     return None
 
 
+_GAP = re.compile(r"\s{2,}")  # grand espace = artefact de colonnes recollées
+
+
+def _split_section_gap(line):
+    """Gère le cas PDF multi-colonnes : 'Expérience pro    Alternance - Kantar...'
+    où le titre de section et le contenu de la colonne voisine sont collés sur la
+    même ligne, séparés par un grand espace (au lieu d'un retour à la ligne).
+    """
+    parts = _GAP.split(line.strip(), maxsplit=1)
+    if len(parts) != 2:
+        return None
+    head, tail = parts[0].strip(), parts[1].strip()
+    if not head or len(head) > 45 or len(head.split()) > 4:
+        return None
+    for pattern, type_section in SECTION_PATTERNS:
+        if pattern.search(head):
+            return type_section, tail
+    return None
+
+
 def chunk_text(text):
     """Découpe le texte en chunks par section.
 
@@ -58,7 +78,7 @@ def chunk_text(text):
     sections.append(("profil", current))
 
     for line in lines:
-        inline = _split_inline(line)
+        inline = _split_inline(line) or _split_section_gap(line)
         if inline:
             type_section, content = inline
             current = [content] if content else []

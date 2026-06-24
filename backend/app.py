@@ -582,4 +582,7 @@ def health():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    # threaded=True : sans ça, le serveur ne traite qu'une requête à la fois - le
+    # temps que le pipeline IA traite un CV (upload), tout le reste (offres, chat...)
+    # reste bloqué en file d'attente jusqu'au timeout côté front.
+    app.run(host="127.0.0.1", port=5000, debug=True, threaded=True)
