@@ -1,118 +1,119 @@
-"""Espace recruteur : offres, résultats de matching, chatbot."""
+"""Espace recruteur : offres, résultats de matching, recherche IA, chatbot."""
 import html
 
 import streamlit as st
 
 import api_client as api
 from mock_data import mock_llm_explanation
-from theme import avatar, progress_bar, skill_pills, status_badge
+from theme import avatar, card, progress_bar, skill_pills, status_badge
 from views.chatbot import render_chatbot
 
 esc = html.escape
+DOMAINES = ["Tech", "Marketing", "Finance", "Design", "Ressources Humaines", "Vente"]
 
 
 def page_recruteur(user):
     st.title(f"Espace recruteur — {user['entreprise']}")
-    tab_offres, tab_candidats, tab_search, tab_chat = st.tabs(
-        ["Mes offres", "Résultats de matching", "Recherche IA", "Chatbot LLM"]
+    tab_offres, tab_match, tab_search, tab_chat = st.tabs(
+        ["💼 Mes offres", "🎯 Matching", "🤖 Recherche IA", "💬 Chatbot LLM"]
     )
-
     with tab_offres:
         _render_offres_tab(user)
-
-    with tab_candidats:
+    with tab_match:
         _render_matching_tab(user)
-
     with tab_search:
         _render_search_tab()
-
     with tab_chat:
         render_chatbot(user)
 
 
-def _render_search_tab():
-    st.caption("Recherche sémantique : décris le profil recherché en langage naturel.")
-    query = st.text_input("Ex : « data engineer Python et Docker »", key="search_ia")
-    if not query:
-        return
-    resultats, error = api.search_candidats(query)
-    if error:
-        st.warning(error)
-        return
-    if not resultats:
-        st.info("Aucun candidat indexé pour le moment.")
-    for r in resultats:
-        st.markdown(f"""
-        <div class="ats-card">
-            <h4>{avatar(r.get('prenom') or '', r.get('nom') or '')}{esc(r.get('prenom') or '')} {esc(r.get('nom') or '')}</h4>
-            {progress_bar(r['score'])}
-        </div>
-        """, unsafe_allow_html=True)
-
-
 def _render_offres_tab(user):
-    with st.expander("Publier une nouvelle offre"):
-        titre = st.text_input("Titre du poste", key="offre_titre")
-        domaine = st.selectbox(
-            "Domaine", ["Tech", "Marketing", "Finance", "Design", "Ressources Humaines", "Vente"],
-            key="offre_domaine",
-        )
-        description = st.text_area("Description", key="offre_description")
-        competences = st.text_input("Compétences requises (séparées par des virgules)", key="offre_competences")
-        if st.button("Publier l'offre", type="primary"):
-            api.create_offre(
-                user["id"], titre, domaine, description,
-                [c.strip() for c in competences.split(",") if c.strip()],
-            )
-            st.success("Offre publiée !")
-            st.rerun()
+    with st.expander("➕ Publier une nouvelle offre"):
+        with st.form("new_offre", clear_on_submit=True):
+            titre = st.text_input("Titre du poste *")
+            domaine = st.selectbox("Domaine", DOMAINES)
+            description = st.text_area("Description")
+            competences = st.text_input("Compétences requises (séparées par des virgules)")
+            ok = st.form_submit_button("Publier l'offre", type="primary", use_container_width=True)
+        if ok:
+            if not titre.strip():
+                st.warning("Le titre est obligatoire.")
+            else:
+                api.create_offre(user["id"], titre.strip(), domaine, description.strip(),
+                                 [c.strip() for c in competences.split(",") if c.strip()])
+                st.toast("Offre publiée ✅", icon="✅")
+                st.rerun()
 
-    mes_offres = api.list_offres(recruteur_id=user["id"])
-    for offre in mes_offres:
-        st.markdown(f"""
-        <div class="ats-card">
-            <h4>{esc(offre['titre'])} {status_badge(offre['statut'])}</h4>
-            <p style="color:#888; margin-top:0;">{esc(offre['domaine'] or '')}</p>
-            <p>{esc(offre['description'] or '')}</p>
-            {skill_pills(offre['competences_requises'])}
-        </div>
-        """, unsafe_allow_html=True)
+    offres = api.list_offres(recruteur_id=user["id"])
+    st.caption(f"{len(offres)} offre(s) publiée(s)")
+    if not offres:
+        st.info("Tu n'as pas encore publié d'offre.")
+    for offre in sorted(offres, key=lambda o: o["date_publication"], reverse=True):  # récentes en haut
+        st.markdown(card(
+            f"<h4>{esc(offre['titre'])} {status_badge(offre['statut'])}</h4>"
+            f"<p style='color:#94a3b8;margin-top:0'>{esc(offre['domaine'] or '')} — publié le {esc(offre['date_publication'])}</p>"
+            f"<p>{esc(offre['description'] or '')}</p>{skill_pills(offre['competences_requises'])}"
+        ), unsafe_allow_html=True)
 
 
 def _render_matching_tab(user):
-    mes_offres = api.list_offres(recruteur_id=user["id"])
-    offre_choisie = st.selectbox(
-        "Choisir une offre", mes_offres, format_func=lambda o: o["titre"]
-    ) if mes_offres else None
-
-    if not offre_choisie:
+    offres = api.list_offres(recruteur_id=user["id"])
+    if not offres:
+        st.info("Publie d'abord une offre pour voir les candidats.")
+        return
+    offre = st.selectbox("Offre à analyser", offres, format_func=lambda o: o["titre"])
+    if not offre:
         return
 
-    candidatures = api.list_candidatures(offre_id=offre_choisie["id"])
-    if not candidatures:
+    cands = api.list_candidatures(offre_id=offre["id"])
+    st.caption(f"{len(cands)} candidature(s) — triées par score de matching")
+    if not cands:
         st.info("Aucune candidature pour cette offre.")
-    for c in sorted(candidatures, key=lambda c: -c["score_matching"]):
+        return
+
+    for c in sorted(cands, key=lambda c: -(c["score_matching"] or 0)):  # meilleur score en haut
         candidat = api.get_user(c["candidat_id"])
         cv = api.get_cv(c["candidat_id"])
-        st.markdown(f"""
-        <div class="ats-card">
-            <h4>{avatar(candidat['prenom'], candidat['nom'])}{esc(candidat['prenom'])} {esc(candidat['nom'])} {status_badge(c['statut'])}</h4>
-            {progress_bar(c['score_matching'])}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(card(
+            f"<h4>{avatar(candidat['prenom'], candidat['nom'])}{esc(candidat['prenom'])} {esc(candidat['nom'])} "
+            f"{status_badge(c['statut'])}</h4>{progress_bar(c['score_matching'])}"
+        ), unsafe_allow_html=True)
         if cv:
-            with st.expander("Voir l'explication du LLM"):
-                st.write(mock_llm_explanation(cv["skills"], offre_choisie["competences_requises"]))
+            with st.expander("🤖 Explication du matching (LLM)"):
+                st.write(mock_llm_explanation(cv["skills"], offre["competences_requises"]))
 
         if c["statut"] == "en attente":
-            with st.form(key=f"reponse_form_{c['id']}"):
-                message = st.text_input("Message au candidat (optionnel)", key=f"msg_{c['id']}")
+            with st.form(f"rep_{c['id']}", clear_on_submit=True):
+                message = st.text_input("Message au candidat (optionnel)")
                 col1, col2 = st.columns(2)
-                accepter = col1.form_submit_button("Accepter", type="primary", use_container_width=True)
-                refuser = col2.form_submit_button("Refuser", use_container_width=True)
-                if accepter or refuser:
-                    api.respond_candidature(c["id"], "acceptée" if accepter else "refusée", message)
+                acc = col1.form_submit_button("✅ Accepter", type="primary", use_container_width=True)
+                ref = col2.form_submit_button("✕ Refuser", use_container_width=True)
+                if acc or ref:
+                    api.respond_candidature(c["id"], "acceptée" if acc else "refusée", message.strip())
+                    st.toast("Réponse envoyée", icon="📨")
                     st.rerun()
         else:
-            st.caption(f"Réponse envoyée le {c.get('date_reponse') or '—'}"
-                       + (f" : « {c['message_recruteur']} »" if c.get("message_recruteur") else ""))
+            msg = f" : « {esc(c['message_recruteur'])} »" if c.get("message_recruteur") else ""
+            st.caption(f"Réponse envoyée le {c.get('date_reponse') or '—'}{msg}")
+        st.divider()
+
+
+def _render_search_tab():
+    st.caption("Décris le profil recherché en langage naturel — l'IA classe les candidats par pertinence sémantique.")
+    query = st.text_input("Ex : « data engineer Python et Docker »", key="search_ia")
+    if not query:
+        return
+    with st.spinner("Recherche sémantique…"):
+        results, err = api.search_candidats(query)
+    if err:
+        st.warning(err)
+        return
+    if not results:
+        st.info("Aucun candidat indexé ne correspond.")
+        return
+    st.caption(f"{len(results)} candidat(s) trouvé(s)")
+    for r in results:
+        st.markdown(card(
+            f"<h4>{avatar(r.get('prenom') or '', r.get('nom') or '')}{esc(r.get('prenom') or '')} {esc(r.get('nom') or '')}</h4>"
+            f"{progress_bar(r['score'])}"
+        ), unsafe_allow_html=True)

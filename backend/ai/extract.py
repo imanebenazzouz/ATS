@@ -14,5 +14,6 @@ def extract_text(pdf_path):
     parts = []
     with fitz.open(pdf_path) as doc:
         for page in doc:
-            parts.append(page.get_text("text"))
+            # sort=True -> ordre de lecture haut->bas, plus robuste sur les CV multi-colonnes
+            parts.append(page.get_text("text", sort=True))
     return "\n".join(parts).strip()

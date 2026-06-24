@@ -158,7 +158,24 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 
+def compact(html_str: str) -> str:
+    """Aplati un bloc HTML multi-lignes en une seule ligne.
+
+    Streamlit (markdown) casse le rendu d'un bloc HTML dès qu'il contient une ligne
+    vide (ex. quand skill_pills est vide) et réaffiche alors les balises en texte brut.
+    En supprimant retours à la ligne et lignes vides, le rendu reste fiable.
+    """
+    return " ".join(line.strip() for line in html_str.splitlines() if line.strip())
+
+
+def card(inner_html: str) -> str:
+    """Enveloppe un contenu HTML dans une carte (rendu fiable, une seule ligne)."""
+    return compact(f"<div class='ats-card'>{inner_html}</div>")
+
+
 def skill_pills(skills):
+    if not skills:
+        return "<span style='color:#94a3b8;font-size:0.85rem'>—</span>"
     return "".join(f"<span class='ats-pill'>{html.escape(str(s))}</span>" for s in skills)
 
 
