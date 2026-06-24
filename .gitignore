@@ -7,3 +7,4 @@ backend/uploads/
 samples/
 .streamlit/secrets.toml
 .env
+EXPLICATIONS_YOUSRA.md
