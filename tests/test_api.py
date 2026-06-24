@@ -40,13 +40,13 @@ def test_health(client):
 
 
 def test_login_ok(client):
-    r = client.post("/auth/login", json={"email": "rh@test.com", "password": "1234"})
+    r = client.post("/auth/login", json={"email": "rec@test.com", "password": "1234"})
     assert r.status_code == 200
     assert r.get_json()["role"] == "recruteur"
 
 
 def test_login_mauvais_mdp(client):
-    assert client.post("/auth/login", json={"email": "rh@test.com", "password": "x"}).status_code == 401
+    assert client.post("/auth/login", json={"email": "rec@test.com", "password": "x"}).status_code == 401
 
 
 def test_login_inconnu(client):
@@ -63,7 +63,7 @@ def test_register_et_login(client):
 
 def test_register_email_duplique(client):
     assert client.post("/auth/register", json={
-        "email": "rh@test.com", "password": "x", "role": "recruteur",
+        "email": "rec@test.com", "password": "x", "role": "recruteur",
         "nom": "A", "prenom": "B"}).status_code == 409
 
 
@@ -98,7 +98,7 @@ def test_offre_contient_entreprise_et_competences(client):
 
 
 def test_creation_offre(client):
-    rh = client.post("/auth/login", json={"email": "rh@test.com", "password": "1234"}).get_json()
+    rh = client.post("/auth/login", json={"email": "rec@test.com", "password": "1234"}).get_json()
     r = client.post("/offres", json={
         "recruteur_id": rh["id"], "titre": "DevOps", "domaine": "Tech",
         "description": "CI/CD", "competences_requises": ["Docker", "K8s"]})
@@ -131,9 +131,9 @@ def test_candidature_offre_inexistante(client):
 def test_reponse_recruteur(client):
     client.post("/candidatures", json={"candidat_id": 1, "offre_id": 2})
     cid = [c for c in client.get("/candidatures?offre_id=2").get_json()][0]["id"]
-    r = client.put(f"/candidatures/{cid}", json={"statut": "acceptée", "message_recruteur": "OK"})
+    r = client.put(f"/candidatures/{cid}", json={"statut": "acceptee", "message_recruteur": "OK"})
     assert r.status_code == 200
-    assert r.get_json()["statut"] == "acceptée" and r.get_json()["date_reponse"]
+    assert r.get_json()["statut"] == "acceptee" and r.get_json()["date_reponse"]
 
 
 def test_reponse_statut_invalide(client):
@@ -194,7 +194,7 @@ def test_candidature_sans_cv(client):
 
 
 def test_offre_sans_competences(client):
-    rh = client.post("/auth/login", json={"email": "rh@test.com", "password": "1234"}).get_json()
+    rh = client.post("/auth/login", json={"email": "rec@test.com", "password": "1234"}).get_json()
     o = client.post("/offres", json={
         "recruteur_id": rh["id"], "titre": "Stage", "domaine": "Tech",
         "description": "Découverte", "competences_requises": []}).get_json()
