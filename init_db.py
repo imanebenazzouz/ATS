@@ -112,6 +112,17 @@ def init_db(db_path=None):
             FOREIGN KEY (session_id) REFERENCES chatbot_sessions(id) ON DELETE CASCADE
         );
 
+        -- Messagerie privée recruteur <-> candidat (ouverte après acceptation)
+        CREATE TABLE IF NOT EXISTS messages (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            candidature_id  INTEGER NOT NULL,
+            expediteur_id   INTEGER NOT NULL,
+            contenu         TEXT NOT NULL,
+            date_envoi      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (candidature_id) REFERENCES candidatures(id) ON DELETE CASCADE,
+            FOREIGN KEY (expediteur_id)  REFERENCES users(id)        ON DELETE CASCADE
+        );
+
         -- Statistiques globales (générées par l'admin)
         CREATE TABLE IF NOT EXISTS statistiques (
             id                  INTEGER PRIMARY KEY AUTOINCREMENT,

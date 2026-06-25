@@ -127,6 +127,21 @@ def respond_candidature(cand_id, statut, message_recruteur=None):
 
 
 # --------------------------------------------------------------------------- #
+# Messagerie
+# --------------------------------------------------------------------------- #
+def get_messages(candidature_id):
+    r = requests.get(_url(f"/candidatures/{candidature_id}/messages"), timeout=TIMEOUT)
+    return r.json() if r.status_code == 200 else []
+
+
+def send_message(candidature_id, expediteur_id, contenu):
+    r = requests.post(_url(f"/candidatures/{candidature_id}/messages"), json={
+        "expediteur_id": expediteur_id, "contenu": contenu,
+    }, timeout=TIMEOUT)
+    return r.status_code == 201, r.json().get("error") if r.status_code != 201 else None
+
+
+# --------------------------------------------------------------------------- #
 # Matching sémantique (Lot B)
 # --------------------------------------------------------------------------- #
 def search_candidats(query):

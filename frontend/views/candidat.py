@@ -5,7 +5,7 @@ import streamlit as st
 
 import api_client as api
 from theme import card, match_chip, progress_bar, reco_badge, skill_pills, status_badge
-from views.chatbot import render_chatbot
+from views.chatbot import render_chatbot, render_messagerie
 
 esc = html.escape
 
@@ -139,3 +139,6 @@ def _render_suivi_tab(user):
             f"<p style='color:#94a3b8;margin-top:0'>Envoyée le {esc(c['date'])}</p>"
             f"{status_badge(c['statut'])}{progress_bar(c['score_matching'])}{reponse}"
         ), unsafe_allow_html=True)
+        if c["statut"] == "acceptee":
+            with st.expander("💬 Messagerie avec le recruteur"):
+                render_messagerie(c["id"], user["id"], key_suffix=f"cand_{c['id']}")

@@ -393,6 +393,72 @@ def respond_candidature(cand_id):
 
 
 # --------------------------------------------------------------------------- #
+# Messagerie privée recruteur <-> candidat
+# --------------------------------------------------------------------------- #
+def message_to_dict(row):
+    return {
+        "id": row["id"],
+        "candidature_id": row["candidature_id"],
+        "expediteur_id": row["expediteur_id"],
+        "prenom": row["prenom"],
+        "nom": row["nom"],
+        "role": row["role"],
+        "contenu": row["contenu"],
+        "date_envoi": row["date_envoi"],
+    }
+
+
+@app.get("/candidatures/<int:cand_id>/messages")
+def get_messages(cand_id):
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT m.id, m.candidature_id, m.expediteur_id, m.contenu, m.date_envoi,
+                  u.prenom, u.nom, u.role
+           FROM messages m JOIN users u ON u.id = m.expediteur_id
+           WHERE m.candidature_id = ?
+           ORDER BY m.date_envoi""",
+        (cand_id,),
+    ).fetchall()
+    conn.close()
+    return jsonify([message_to_dict(r) for r in rows])
+
+
+@app.post("/candidatures/<int:cand_id>/messages")
+def send_message(cand_id):
+    data = request.get_json(force=True)
+    expediteur_id = data.get("expediteur_id")
+    contenu = (data.get("contenu") or "").strip()
+    if not expediteur_id or not contenu:
+        return jsonify({"error": "expediteur_id et contenu requis"}), 400
+    conn = get_connection()
+    cand = conn.execute("SELECT * FROM candidatures WHERE id = ?", (cand_id,)).fetchone()
+    if not cand:
+        conn.close()
+        return jsonify({"error": "Candidature introuvable"}), 404
+    if cand["statut"] != "acceptee":
+        conn.close()
+        return jsonify({"error": "La messagerie n'est disponible que pour les candidatures acceptées"}), 403
+    offre = conn.execute("SELECT recruteur_id FROM offres WHERE id = ?", (cand["offre_id"],)).fetchone()
+    if expediteur_id not in (cand["candidat_id"], offre["recruteur_id"]):
+        conn.close()
+        return jsonify({"error": "Accès refusé"}), 403
+    cur = conn.execute(
+        "INSERT INTO messages (candidature_id, expediteur_id, contenu) VALUES (?, ?, ?)",
+        (cand_id, expediteur_id, contenu),
+    )
+    conn.commit()
+    row = conn.execute(
+        """SELECT m.id, m.candidature_id, m.expediteur_id, m.contenu, m.date_envoi,
+                  u.prenom, u.nom, u.role
+           FROM messages m JOIN users u ON u.id = m.expediteur_id
+           WHERE m.id = ?""",
+        (cur.lastrowid,),
+    ).fetchone()
+    conn.close()
+    return jsonify(message_to_dict(row)), 201
+
+
+# --------------------------------------------------------------------------- #
 # Matching sémantique (Lot B) — embeddings MiniLM + FAISS + cosinus
 # --------------------------------------------------------------------------- #
 def _require_pipeline():

@@ -6,7 +6,7 @@ import streamlit as st
 import api_client as api
 from mock_data import mock_llm_explanation
 from theme import avatar, card, match_chip, progress_bar, skill_pills, status_badge
-from views.chatbot import render_chatbot
+from views.chatbot import render_chatbot, render_messagerie
 
 esc = html.escape
 DOMAINES = ["Tech", "Marketing", "Finance", "Design", "Ressources Humaines", "Vente"]
@@ -95,6 +95,9 @@ def _render_matching_tab(user):
         else:
             msg = f" : « {esc(c['message_recruteur'])} »" if c.get("message_recruteur") else ""
             st.caption(f"Réponse envoyée le {c.get('date_reponse') or '—'}{msg}")
+            if c["statut"] == "acceptee":
+                with st.expander("💬 Messagerie avec le candidat"):
+                    render_messagerie(c["id"], user["id"], key_suffix=f"rec_{c['id']}")
         st.divider()
 
 
