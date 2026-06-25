@@ -10,6 +10,7 @@ import requests
 
 BASE_URL = os.environ.get("ATS_API_URL", "http://127.0.0.1:5000")
 TIMEOUT = 15
+AI_TIMEOUT = 60  # pipeline IA (extraction/embeddings) : lent au premier appel (chargement du modèle)
 
 
 def _url(path):
@@ -94,7 +95,7 @@ def get_cv(candidat_id):
 def upload_cv(candidat_id, uploaded_file):
     """Envoie le PDF (objet UploadedFile Streamlit) à l'API."""
     files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
-    r = requests.post(_url("/cvs"), data={"candidat_id": candidat_id}, files=files, timeout=TIMEOUT)
+    r = requests.post(_url("/cvs"), data={"candidat_id": candidat_id}, files=files, timeout=AI_TIMEOUT)
     return r.json()
 
 
@@ -131,7 +132,7 @@ def respond_candidature(cand_id, statut, message_recruteur=None):
 # --------------------------------------------------------------------------- #
 def search_candidats(query):
     """Recherche RH en langage naturel. Retourne (resultats, error)."""
-    r = requests.post(_url("/search/candidats"), json={"query": query}, timeout=TIMEOUT)
+    r = requests.post(_url("/search/candidats"), json={"query": query}, timeout=AI_TIMEOUT)
     if r.status_code == 200:
         return r.json(), None
     return None, r.json().get("error", "Erreur inconnue.")
@@ -139,7 +140,7 @@ def search_candidats(query):
 
 def matching_candidats(offre_id):
     """Candidats classés pour une offre (offre -> CV). Retourne (resultats, error)."""
-    r = requests.get(_url("/matching/candidats"), params={"offre_id": offre_id}, timeout=TIMEOUT)
+    r = requests.get(_url("/matching/candidats"), params={"offre_id": offre_id}, timeout=AI_TIMEOUT)
     if r.status_code == 200:
         return r.json(), None
     return None, r.json().get("error", "Erreur inconnue.")
@@ -147,7 +148,7 @@ def matching_candidats(offre_id):
 
 def matching_offres(candidat_id):
     """Offres recommandées pour un candidat (CV -> offres). Retourne (resultats, error)."""
-    r = requests.get(_url("/matching/offres"), params={"candidat_id": candidat_id}, timeout=TIMEOUT)
+    r = requests.get(_url("/matching/offres"), params={"candidat_id": candidat_id}, timeout=AI_TIMEOUT)
     if r.status_code == 200:
         return r.json(), None
     return None, r.json().get("error", "Erreur inconnue.")
